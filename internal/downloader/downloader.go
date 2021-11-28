@@ -8,6 +8,11 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/storage/memory"
+	"github.com/k1nky/apm/internal/move"
+)
+
+const (
+	DefDestinationMode = 0755
 )
 
 type DownloaderGlobs []string
@@ -20,7 +25,8 @@ type DownloaderOptions struct {
 }
 
 type Downloader struct {
-	repo *git.Repository
+	repo    *git.Repository
+	options *DownloaderOptions
 }
 
 func (options *DownloaderOptions) Validate() (err error) {
@@ -41,7 +47,7 @@ func (options *DownloaderOptions) Validate() (err error) {
 	return nil
 }
 
-func (d *Downloader) clone(path string, url string, ref *plumbing.Reference) (err error) {
+func (d *Downloader) clone(dir string, url string, ref *plumbing.Reference) (err error) {
 
 	var (
 		wt   *git.Worktree
@@ -56,7 +62,7 @@ func (d *Downloader) clone(path string, url string, ref *plumbing.Reference) (er
 	if ref.Name().IsBranch() {
 		cloneOptions.ReferenceName = ref.Name()
 	}
-	if d.repo, err = git.PlainClone(path, false, cloneOptions); err != nil {
+	if d.repo, err = git.PlainClone(dir, false, cloneOptions); err != nil {
 		return
 	}
 
@@ -97,8 +103,9 @@ func (d *Downloader) Get(url string, version string, dest string, options *Downl
 	if err := options.Validate(); err != nil {
 		return err
 	}
+	d.options = options
 
-	// defer os.RemoveAll(options.TempDirectory)
+	defer os.RemoveAll(options.TempDirectory)
 
 	ref, err := d.pulse(url, version)
 	if err != nil {
@@ -106,6 +113,14 @@ func (d *Downloader) Get(url string, version string, dest string, options *Downl
 	}
 
 	if err := d.clone(options.TempDirectory, url, ref); err != nil {
+		return err
+	}
+
+	if err := move.Move(options.TempDirectory, dest, &move.MoveOptions{
+		Globs:    options.Globs,
+		Exclude:  []string{`\.git`},
+		Override: options.Override,
+	}); err != nil {
 		return err
 	}
 

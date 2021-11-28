@@ -5,6 +5,9 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
+	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/go-git/go-git/v5"
@@ -13,6 +16,7 @@ import (
 
 const (
 	DefTestPublicURL = "https://bitbucket.org/bitjackass/public-roles"
+	DefAPMGetTmpDir  = "/tmp/apm-get"
 )
 
 func isTestFileExist(repo *git.Repository, filename string) (err error) {
@@ -167,8 +171,37 @@ func TestPulseByHash(t *testing.T) {
 }
 
 func TestGet(t *testing.T) {
-	// d := &Downloader{}
-	// d.Get(DefTestPublicURL, "1.0",)
+	d := &Downloader{}
+	cases := map[string]struct {
+		version string
+		opt     *DownloaderOptions
+		wants   []string
+	}{
+		"default":     {"2.0", &DownloaderOptions{}, []string{"defaults", "tasks", "is_v2.yml"}},
+		"tasks":       {"2.0", &DownloaderOptions{Globs: []string{"tasks"}}, []string{"tasks"}},
+		"tasks/*.yml": {"2.0", &DownloaderOptions{Globs: []string{"tasks/*.yml"}}, []string{"tasks", "tasks/main.yml"}},
+	}
+	for k, v := range cases {
+		t.Logf("test case %s", k)
+		if err := d.Get(DefTestPublicURL, v.version, DefAPMGetTmpDir, v.opt); err != nil {
+			t.Error(err)
+			t.Fail()
+		}
+		files, err := filepath.Glob(path.Join(DefAPMGetTmpDir, "*"))
+		if err != nil {
+			t.Fail()
+			t.Error(err)
+		}
+		sort.Strings(files)
+		t.Log("got files ", files)
+		for _, f := range v.wants {
+			if idx := sort.SearchStrings(files, path.Join(DefAPMGetTmpDir, f)); idx == len(files) {
+				t.Errorf("expected file %s not found", f)
+				t.Fail()
+			}
+		}
+		os.RemoveAll(DefAPMGetTmpDir)
+	}
 }
 
 func tearDown(tmpdir string) {
