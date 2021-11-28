@@ -1,26 +1,37 @@
 package downloader
 
 import (
+	"errors"
 	"io/ioutil"
 	"os"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/k1nky/apm/internal/move"
 )
 
+type DownloaderGlobs []string
+
 const (
-	DefDestinationMode = 0755
+	DownloaderNoAuth = iota
+	DownloaderSSHAgentAuth
+	DownloaderBasicAuth
 )
 
-type DownloaderGlobs []string
+type DownloaderAuthType int
 
 type DownloaderOptions struct {
 	TempDirectory string
 	Override      bool
 	UseGitConfig  bool
+	Auth          DownloaderAuthType
+	Username      string
+	Password      string
 	Globs         DownloaderGlobs
 }
 
@@ -47,6 +58,23 @@ func (options *DownloaderOptions) Validate() (err error) {
 	return nil
 }
 
+func (d *Downloader) auth() (method transport.AuthMethod, err error) {
+	switch d.options.Auth {
+	case DownloaderNoAuth:
+	case DownloaderSSHAgentAuth:
+		method, err = ssh.NewSSHAgentAuth("")
+	case DownloaderBasicAuth:
+		method = &http.BasicAuth{
+			Username: d.options.Username,
+			Password: d.options.Password,
+		}
+	default:
+		err = errors.New("unsupported auth method")
+	}
+
+	return
+}
+
 func (d *Downloader) clone(dir string, url string, ref *plumbing.Reference) (err error) {
 
 	var (
@@ -61,6 +89,11 @@ func (d *Downloader) clone(dir string, url string, ref *plumbing.Reference) (err
 	}
 	if ref.Name().IsBranch() {
 		cloneOptions.ReferenceName = ref.Name()
+	}
+	if method, err := d.auth(); err != nil {
+		return err
+	} else if method != nil {
+		cloneOptions.Auth = method
 	}
 	if d.repo, err = git.PlainClone(dir, false, cloneOptions); err != nil {
 		return
@@ -80,11 +113,17 @@ func (d *Downloader) clone(dir string, url string, ref *plumbing.Reference) (err
 }
 
 func (d *Downloader) pulse(url string, version string) (*plumbing.Reference, error) {
+	listOptions := &git.ListOptions{}
 	remRepo := git.NewRemote(memory.NewStorage(), &config.RemoteConfig{
 		Name: "origin",
 		URLs: []string{url},
 	})
-	refs, err := remRepo.List(&git.ListOptions{})
+	if method, err := d.auth(); err != nil {
+		return nil, err
+	} else if method != nil {
+		listOptions.Auth = method
+	}
+	refs, err := remRepo.List(listOptions)
 	if err != nil {
 		return nil, err
 	}
