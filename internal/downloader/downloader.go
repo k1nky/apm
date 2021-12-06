@@ -2,8 +2,8 @@ package downloader
 
 import (
 	"errors"
-	"io/ioutil"
-	"os"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -12,7 +12,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/go-git/go-git/v5/storage/memory"
-	"github.com/k1nky/apm/internal/move"
 )
 
 type DownloaderGlobs []string
@@ -26,13 +25,12 @@ const (
 type DownloaderAuthType int
 
 type DownloaderOptions struct {
-	TempDirectory string
-	Override      bool
-	UseGitConfig  bool
-	Auth          DownloaderAuthType
-	Username      string
-	Password      string
-	Globs         DownloaderGlobs
+	Override     bool
+	UseGitConfig bool
+	Auth         DownloaderAuthType
+	Username     string
+	Password     string
+	Globs        DownloaderGlobs
 }
 
 type Downloader struct {
@@ -41,17 +39,6 @@ type Downloader struct {
 }
 
 func (options *DownloaderOptions) Validate() (err error) {
-	var tempDir string
-
-	if options.TempDirectory == "" {
-		if tempDir, err = ioutil.TempDir("", "apm-"); err != nil {
-			return
-		}
-		options.TempDirectory = tempDir
-	}
-	if _, err = os.Stat(options.TempDirectory); err != nil {
-		return
-	}
 	if len(options.Globs) == 0 {
 		options.Globs = append(options.Globs, "*")
 	}
@@ -144,22 +131,13 @@ func (d *Downloader) Get(url string, version string, dest string, options *Downl
 	}
 	d.options = options
 
-	defer os.RemoveAll(options.TempDirectory)
-
+	logrus.Debugf("check pulse of %s", url)
 	ref, err := d.pulse(url, version)
 	if err != nil {
 		return err
 	}
 
-	if err := d.clone(options.TempDirectory, url, ref); err != nil {
-		return err
-	}
-
-	if err := move.Move(options.TempDirectory, dest, &move.MoveOptions{
-		Globs:    options.Globs,
-		Exclude:  []string{`\.git`},
-		Override: options.Override,
-	}); err != nil {
+	if err := d.clone(dest, url, ref); err != nil {
 		return err
 	}
 

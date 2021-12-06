@@ -69,37 +69,11 @@ func TestDownloaderOptions(t *testing.T) {
 		return
 	}
 
-	if _, err := os.Stat(opt.TempDirectory); opt.TempDirectory == "" || err != nil {
-		t.Error("invalid temp directory", err)
-	}
-	defer os.RemoveAll(opt.TempDirectory)
 	if len(opt.Globs) == 0 {
 		t.Error("expected at least one glob")
 	} else if opt.Globs[0] != "*" {
 		t.Error("expected default wildcard glob")
 	}
-}
-
-func TestDownloaderOptionsInvalidDirectory(t *testing.T) {
-	opt := &DownloaderOptions{
-		TempDirectory: "/tmp/apm-invalid-path",
-	}
-	if err := opt.Validate(); err == nil {
-		t.Error("expected not nil error")
-	}
-}
-
-func TestInvalidDownloaderOptions(t *testing.T) {
-	opt := DownloaderOptions{}
-	if err := opt.Validate(); err != nil {
-		t.Error(err)
-		return
-	}
-
-	if _, err := os.Stat(opt.TempDirectory); opt.TempDirectory == "" || err != nil {
-		t.Error("invalid temp directory", err)
-	}
-	defer os.RemoveAll(opt.TempDirectory)
 }
 
 func TestCloneByTag(t *testing.T) {
