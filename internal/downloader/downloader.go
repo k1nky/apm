@@ -14,8 +14,6 @@ import (
 	"github.com/go-git/go-git/v5/storage/memory"
 )
 
-type DownloaderGlobs []string
-
 const (
 	DownloaderNoAuth = iota
 	DownloaderSSHAgentAuth
@@ -30,7 +28,6 @@ type DownloaderOptions struct {
 	Auth         DownloaderAuthType
 	Username     string
 	Password     string
-	Globs        DownloaderGlobs
 }
 
 type Downloader struct {
@@ -38,10 +35,18 @@ type Downloader struct {
 	options *DownloaderOptions
 }
 
-func (options *DownloaderOptions) Validate() (err error) {
-	if len(options.Globs) == 0 {
-		options.Globs = append(options.Globs, "*")
+func NewDownloader() *Downloader {
+	return &Downloader{
+		repo: nil,
+		options: &DownloaderOptions{
+			Override:     true,
+			UseGitConfig: true,
+			Auth:         DownloaderNoAuth,
+		},
 	}
+}
+
+func (options *DownloaderOptions) Validate() (err error) {
 	return nil
 }
 

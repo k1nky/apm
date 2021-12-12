@@ -1,31 +1,76 @@
 package downloader
 
 import (
+	"crypto/md5"
 	"errors"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"path"
-	"path/filepath"
-	"sort"
 	"testing"
 
-	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 )
 
 const (
-	DefTestPublicURL = "https://bitbucket.org/bitjackass/public-roles"
+	DefTestPublicURL = "https://bitbucket.org/bitjackass/apm-test-example"
 	DefAPMGetTmpDir  = "/tmp/apm-get"
 )
 
-func isTestFileExist(repo *git.Repository, filename string) (err error) {
-	wt, err := repo.Worktree()
-	if err != nil {
-		return
+type testFileFingerprint struct {
+	Hash string
+	Path string
+}
+
+var (
+	cloneCase map[string][]testFileFingerprint = map[string][]testFileFingerprint{
+		"dev": []testFileFingerprint{
+			{"4f260daf425fbcb28450a73b4875b2c3", "sub_b/sub_b.yml"},
+			{"ded11434ce59b89da43803f40599c25f", "sub_a/sub_a1/2.json"},
+			{"798ec063a2559fe9182c13a1801a72a2", "sub_a/sub_a1/1.json"},
+			{"29fc9c2a655b2713fc456f3caa5c7aa4", "sub_a/sub_a.yml"},
+			{"e77989ed21758e78331b20e477fc5582", "main.txt"},
+		},
+		"v2.0": []testFileFingerprint{
+			{"4f260daf425fbcb28450a73b4875b2c3", "sub_b/sub_b.yml"},
+			{"99914b932bd37a50b983c5e7c90ae93b", "sub_a/sub_a1/2.json"},
+			{"798ec063a2559fe9182c13a1801a72a2", "sub_a/sub_a1/1.json"},
+			{"29fc9c2a655b2713fc456f3caa5c7aa4", "sub_a/sub_a.yml"},
+			{"8b4e9455dfd3b112a055967deff47ea2", "main.txt"},
+		},
+		"6954198": []testFileFingerprint{
+			{"8084392a5c5ea785d82d66efbdd118f4", "sub_b/sub_b.yml"},
+			{"ded11434ce59b89da43803f40599c25f", "sub_a/sub_a1/2.json"},
+			{"798ec063a2559fe9182c13a1801a72a2", "sub_a/sub_a1/1.json"},
+			{"29fc9c2a655b2713fc456f3caa5c7aa4", "sub_a/sub_a.yml"},
+			{"71ccb7a35a452ea8153b6d920f9f190e", "main.txt"},
+		},
 	}
-	_, err = wt.Filesystem.Stat(filename)
-	return
+)
+
+func getFileMD5(file string) (string, error) {
+	f, err := os.Open(file)
+	if err != nil {
+		return "", err
+	}
+
+	defer f.Close()
+	h := md5.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
+func verifyDirectory(dir string, want []testFileFingerprint) (err error) {
+	for _, v := range want {
+		if h, err := getFileMD5(path.Join(dir, v.Path)); err != nil || h != v.Hash {
+			return fmt.Errorf("file fingerprint is invalid or file does not exist")
+		}
+	}
+	return nil
 }
 
 func prepareCloneTest() (tmpdir string, d *Downloader) {
@@ -34,28 +79,23 @@ func prepareCloneTest() (tmpdir string, d *Downloader) {
 		log.Panic(err)
 		return "", nil
 	}
-	return tmpdir, &Downloader{}
+	return tmpdir, NewDownloader()
 }
 
-func testClone(what string, want string) (err error) {
+func testGet(version string, want []testFileFingerprint) (err error) {
 	tmpdir, d := prepareCloneTest()
 	if d == nil {
 		return errors.New("a tmp directory was not created")
 	}
 	defer tearDown(tmpdir)
 
-	ref, err := d.pulse(DefTestPublicURL, what)
-	if err != nil {
-		return err
-	}
-	if err = d.clone(tmpdir, DefTestPublicURL, ref); err != nil {
-		return err
+	if err = d.Get(DefTestPublicURL, version, tmpdir, &DownloaderOptions{}); err != nil {
+		return
 	}
 
-	err = isTestFileExist(d.repo, want)
+	err = verifyDirectory(tmpdir, want)
 
 	return
-
 }
 
 func TestMain(m *testing.M) {
@@ -68,40 +108,28 @@ func TestDownloaderOptions(t *testing.T) {
 		t.Error(err)
 		return
 	}
-
-	if len(opt.Globs) == 0 {
-		t.Error("expected at least one glob")
-	} else if opt.Globs[0] != "*" {
-		t.Error("expected default wildcard glob")
-	}
 }
 
-func TestCloneByTag(t *testing.T) {
-	if err := testClone("v2.0", "is_v2.yml"); err != nil {
+func TestGetByTag(t *testing.T) {
+	if err := testGet("v2.0", cloneCase["v2.0"]); err != nil {
 		t.Error(err)
 	}
 }
 
-func TestCloneByHash(t *testing.T) {
-	if err := testClone("20a5b29", "is_hash.yml"); err != nil {
+func TestGetByHash(t *testing.T) {
+	if err := testGet("6954198", cloneCase["6954198"]); err != nil {
 		t.Error(err)
 	}
 }
 
-func TestCloneByBranch(t *testing.T) {
-	if err := testClone("dev", "is_dev.yml"); err != nil {
-		t.Error(err)
-	}
-}
-
-func TestCloneByHashBranch(t *testing.T) {
-	if err := testClone("db72642", "is_dev.yml"); err != nil {
+func TestGetByBranch(t *testing.T) {
+	if err := testGet("dev", cloneCase["dev"]); err != nil {
 		t.Error(err)
 	}
 }
 
 func TestPulseUnreachable(t *testing.T) {
-	d := &Downloader{}
+	d := NewDownloader()
 	ref, err := d.pulse(DefTestPublicURL+"-invalid", "v2.0")
 	if ref != nil || err == nil {
 		t.Errorf("expected nil reference and error but got %v %s", ref, err)
@@ -109,7 +137,7 @@ func TestPulseUnreachable(t *testing.T) {
 }
 
 func TestPulseByTag(t *testing.T) {
-	d := &Downloader{}
+	d := NewDownloader()
 	ref, err := d.pulse(DefTestPublicURL, "v2.0")
 	t.Logf("Got: %v", ref)
 	if err != nil {
@@ -121,7 +149,7 @@ func TestPulseByTag(t *testing.T) {
 }
 
 func TestPulseByBranch(t *testing.T) {
-	d := &Downloader{}
+	d := NewDownloader()
 	ref, err := d.pulse(DefTestPublicURL, "dev")
 	t.Logf("Got: %v", ref)
 	if err != nil {
@@ -133,48 +161,14 @@ func TestPulseByBranch(t *testing.T) {
 }
 
 func TestPulseByHash(t *testing.T) {
-	d := &Downloader{}
-	ref, err := d.pulse(DefTestPublicURL, "ec30b20")
+	d := NewDownloader()
+	ref, err := d.pulse(DefTestPublicURL, "6954198")
 	t.Logf("Got: %v", ref)
 	if err != nil {
 		t.Error(err)
 	}
 	if ref == nil || (ref != nil && ref.Type() != plumbing.HashReference) {
 		t.Errorf("expected nil reference")
-	}
-}
-
-func TestGet(t *testing.T) {
-	d := &Downloader{}
-	cases := map[string]struct {
-		version string
-		opt     *DownloaderOptions
-		wants   []string
-	}{
-		"default":     {"2.0", &DownloaderOptions{}, []string{"defaults", "tasks", "is_v2.yml"}},
-		"tasks":       {"2.0", &DownloaderOptions{Globs: []string{"tasks"}}, []string{"tasks"}},
-		"tasks/*.yml": {"2.0", &DownloaderOptions{Globs: []string{"tasks/*.yml"}}, []string{"tasks", "tasks/main.yml"}},
-	}
-	for k, v := range cases {
-		t.Logf("test case %s", k)
-		if err := d.Get(DefTestPublicURL, v.version, DefAPMGetTmpDir, v.opt); err != nil {
-			t.Error(err)
-			t.Fail()
-		}
-		files, err := filepath.Glob(path.Join(DefAPMGetTmpDir, "*"))
-		if err != nil {
-			t.Fail()
-			t.Error(err)
-		}
-		sort.Strings(files)
-		t.Log("got files ", files)
-		for _, f := range v.wants {
-			if idx := sort.SearchStrings(files, path.Join(DefAPMGetTmpDir, f)); idx == len(files) {
-				t.Errorf("expected file %s not found", f)
-				t.Fail()
-			}
-		}
-		os.RemoveAll(DefAPMGetTmpDir)
 	}
 }
 
