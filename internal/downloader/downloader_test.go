@@ -10,8 +10,6 @@ import (
 	"os"
 	"path"
 	"testing"
-
-	"github.com/go-git/go-git/v5/plumbing"
 )
 
 const (
@@ -125,50 +123,6 @@ func TestGetByHash(t *testing.T) {
 func TestGetByBranch(t *testing.T) {
 	if err := testGet("dev", cloneCase["dev"]); err != nil {
 		t.Error(err)
-	}
-}
-
-func TestPulseUnreachable(t *testing.T) {
-	d := NewDownloader()
-	ref, err := d.pulse(DefTestPublicURL+"-invalid", "v2.0")
-	if ref != nil || err == nil {
-		t.Errorf("expected nil reference and error but got %v %s", ref, err)
-	}
-}
-
-func TestPulseByTag(t *testing.T) {
-	d := NewDownloader()
-	ref, err := d.pulse(DefTestPublicURL, "v2.0")
-	t.Logf("Got: %v", ref)
-	if err != nil {
-		t.Error(err)
-	}
-	if ref == nil || (ref != nil && !ref.Name().IsTag()) {
-		t.Error("expected tag type")
-	}
-}
-
-func TestPulseByBranch(t *testing.T) {
-	d := NewDownloader()
-	ref, err := d.pulse(DefTestPublicURL, "dev")
-	t.Logf("Got: %v", ref)
-	if err != nil {
-		t.Error(err)
-	}
-	if ref == nil || (ref != nil && !ref.Name().IsBranch()) {
-		t.Error("expected branch type")
-	}
-}
-
-func TestPulseByHash(t *testing.T) {
-	d := NewDownloader()
-	ref, err := d.pulse(DefTestPublicURL, "6954198")
-	t.Logf("Got: %v", ref)
-	if err != nil {
-		t.Error(err)
-	}
-	if ref == nil || (ref != nil && ref.Type() != plumbing.HashReference) {
-		t.Errorf("expected nil reference")
 	}
 }
 

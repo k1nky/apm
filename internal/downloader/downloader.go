@@ -2,16 +2,13 @@ package downloader
 
 import (
 	"errors"
-
-	"github.com/sirupsen/logrus"
+	"fmt"
 
 	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
-	"github.com/go-git/go-git/v5/storage/memory"
 )
 
 const (
@@ -23,7 +20,9 @@ const (
 type DownloaderAuthType int
 
 type DownloaderOptions struct {
-	Override     bool
+	// TODO: Override existing directory
+	Override bool
+	// TODO: Read .gitconfig to override URL
 	UseGitConfig bool
 	Auth         DownloaderAuthType
 	Username     string
@@ -31,13 +30,11 @@ type DownloaderOptions struct {
 }
 
 type Downloader struct {
-	repo    *git.Repository
 	options *DownloaderOptions
 }
 
 func NewDownloader() *Downloader {
 	return &Downloader{
-		repo: nil,
 		options: &DownloaderOptions{
 			Override:     true,
 			UseGitConfig: true,
@@ -67,66 +64,54 @@ func (d *Downloader) auth() (method transport.AuthMethod, err error) {
 	return
 }
 
-func (d *Downloader) clone(dir string, url string, ref *plumbing.Reference) (err error) {
-
-	var (
-		wt   *git.Worktree
-		hash *plumbing.Hash
-	)
-
+func (d *Downloader) clone(dir string, url string) (err error) {
 	cloneOptions := &git.CloneOptions{
 		URL:          url,
 		SingleBranch: false,
 		Tags:         git.AllTags,
-	}
-	if ref.Name().IsBranch() {
-		cloneOptions.ReferenceName = ref.Name()
+		RemoteName:   "origin",
 	}
 	if method, err := d.auth(); err != nil {
 		return err
 	} else if method != nil {
 		cloneOptions.Auth = method
 	}
-	if d.repo, err = git.PlainClone(dir, false, cloneOptions); err != nil {
-		return
-	}
+	_, err = git.PlainClone(dir, false, cloneOptions)
 
-	if hash, err = d.repo.ResolveRevision(plumbing.Revision(ref.Name())); err != nil {
+	return
+}
+
+func (d *Downloader) Switch(dir string, version string) (err error) {
+	var (
+		wt   *git.Worktree
+		hash *plumbing.Hash
+		repo *git.Repository
+		// revisions []plumbing.Revision = []plumbing.Revision{version, fmt.Sprintf("origin/{}", version)}
+	)
+
+	revisions := []plumbing.Revision{plumbing.Revision(version), plumbing.Revision("origin/" + version)}
+
+	if repo, err = git.PlainOpen(dir); err != nil {
 		return
 	}
-	if wt, err = d.repo.Worktree(); err != nil {
+	// Workaround: https://github.com/go-git/go-git/issues/148#issuecomment-989635832
+	repo.ResolveRevision(plumbing.Revision("HEAD"))
+	for _, rev := range revisions {
+		if hash, err = repo.ResolveRevision(rev); err == nil {
+			break
+		}
+		hash = nil
+	}
+	if hash == nil {
+		return fmt.Errorf("version not found")
+	}
+	if wt, err = repo.Worktree(); err != nil {
 		return
 	}
 	err = wt.Checkout(&git.CheckoutOptions{
 		Hash: *hash,
 	})
-
 	return
-}
-
-func (d *Downloader) pulse(url string, version string) (*plumbing.Reference, error) {
-	listOptions := &git.ListOptions{}
-	remRepo := git.NewRemote(memory.NewStorage(), &config.RemoteConfig{
-		Name: "origin",
-		URLs: []string{url},
-	})
-	if method, err := d.auth(); err != nil {
-		return nil, err
-	} else if method != nil {
-		listOptions.Auth = method
-	}
-	refs, err := remRepo.List(listOptions)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, ref := range refs {
-		if ref.Name().Short() == version {
-			return ref, nil
-		}
-	}
-
-	return plumbing.NewHashReference(plumbing.ReferenceName(version), plumbing.NewHash(version)), nil
 }
 
 func (d *Downloader) Get(url string, version string, dest string, options *DownloaderOptions) error {
@@ -136,13 +121,10 @@ func (d *Downloader) Get(url string, version string, dest string, options *Downl
 	}
 	d.options = options
 
-	logrus.Debugf("check pulse of %s", url)
-	ref, err := d.pulse(url, version)
-	if err != nil {
+	if err := d.clone(dest, url); err != nil {
 		return err
 	}
-
-	if err := d.clone(dest, url, ref); err != nil {
+	if err := d.Switch(dest, version); err != nil {
 		return err
 	}
 
