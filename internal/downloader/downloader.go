@@ -35,11 +35,15 @@ type Downloader struct {
 
 func NewDownloader() *Downloader {
 	return &Downloader{
-		options: &DownloaderOptions{
-			Override:     true,
-			UseGitConfig: true,
-			Auth:         DownloaderNoAuth,
-		},
+		options: DefaultDownloaderOptions(),
+	}
+}
+
+func DefaultDownloaderOptions() *DownloaderOptions {
+	return &DownloaderOptions{
+		Override:     true,
+		UseGitConfig: true,
+		Auth:         DownloaderNoAuth,
 	}
 }
 
@@ -116,6 +120,9 @@ func (d *Downloader) Switch(dir string, version string) (err error) {
 
 func (d *Downloader) Get(url string, version string, dest string, options *DownloaderOptions) error {
 
+	if options == nil {
+		options = DefaultDownloaderOptions()
+	}
 	if err := options.Validate(); err != nil {
 		return err
 	}
