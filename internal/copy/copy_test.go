@@ -41,9 +41,11 @@ func testCopy(what string, want []string) (err error) {
 	}
 	defer os.RemoveAll(tmpdir)
 
-	if err = Copy(what, tmpdir, &CopyOptions{
-		SourceRoot: testSrcDir,
-	}); err != nil {
+	fs, err := ResolveGlob(testSrcDir, what, nil)
+	if err != nil {
+		return err
+	}
+	if err = Copy(testSrcDir, fs, tmpdir, nil); err != nil {
 		return
 	}
 	for _, v := range want {

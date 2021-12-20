@@ -14,52 +14,74 @@ const (
 	DefaultDestinationMode = 0755
 )
 
+type GlobOptions struct {
+	Exclude []string
+}
+
 type CopyOptions struct {
-	SourceRoot string
-	Exclude    []string
-	Override   bool
+	Override bool
 }
 
 func (opt *CopyOptions) Validate() error {
-	if opt.SourceRoot == "" {
-		opt.SourceRoot, _ = os.Getwd()
-	}
-	if len(opt.Exclude) == 0 {
-		opt.Exclude = []string{".git"}
+	return nil
+}
+
+func (opts *GlobOptions) Validate() error {
+	if len(opts.Exclude) == 0 {
+		opts.Exclude = []string{".git"}
 	}
 	return nil
 }
 
-func pickup(src string, options *CopyOptions) (files []string, err error) {
-	fs, err := filepath.Glob(path.Join(options.SourceRoot, src))
+func ValidateRoot(root string) (string, error) {
+	if root == "" {
+		return os.Getwd()
+	}
+	return root, nil
+}
+
+func ResolveGlob(root string, glob string, opts *GlobOptions) (files []string, err error) {
+
+	root, _ = ValidateRoot(root)
+	if opts == nil {
+		opts = &GlobOptions{}
+	}
+	if err := opts.Validate(); err != nil {
+		return nil, err
+	}
+
+	fs, err := filepath.Glob(path.Join(root, glob))
 	if err != nil {
 		return files, err
 	}
 	dirtyFiles := append(files, fs...)
-	if len(options.Exclude) == 0 {
+
+	if len(opts.Exclude) == 0 {
 		files = dirtyFiles
-	}
-	for _, exclude := range options.Exclude {
-		re, err := regexp.Compile(exclude)
-		if err != nil {
-			return files, err
-		}
-		for _, f := range dirtyFiles {
-			if matched := re.MatchString(f); !matched {
-				files = append(files, f)
+	} else {
+		for _, exclude := range opts.Exclude {
+			re, err := regexp.Compile(exclude)
+			if err != nil {
+				return files, err
+			}
+			for _, f := range dirtyFiles {
+				if matched := re.MatchString(f); !matched {
+					files = append(files, f)
+				}
 			}
 		}
 	}
+
 	return
 }
 
-func copyFiles(dest string, files []string, options *CopyOptions) error {
+func copyFiles(root string, files []string, dest string, options *CopyOptions) error {
 	if err := os.MkdirAll(dest, DefaultDestinationMode); err != nil {
 		return err
 	}
 	for _, f := range files {
-		original, _ := filepath.Rel(options.SourceRoot, f)
-		destFile := path.Join(dest, original)
+		relpath, _ := filepath.Rel(root, f)
+		destFile := path.Join(dest, relpath)
 		_, err := os.Stat(destFile)
 		if os.IsNotExist(err) {
 			os.MkdirAll(path.Dir(destFile), DefaultDestinationMode)
@@ -137,9 +159,9 @@ func copyDir(src string, dest string) (err error) {
 	return nil
 }
 
-func Copy(src string, dest string, options *CopyOptions) error {
+func Copy(root string, files []string, dest string, options *CopyOptions) error {
 	if options == nil {
-		options = new(CopyOptions)
+		options = &CopyOptions{}
 	}
 	if err := options.Validate(); err != nil {
 		return err
@@ -150,11 +172,7 @@ func Copy(src string, dest string, options *CopyOptions) error {
 		}
 	}
 
-	files, err := pickup(src, options)
-	if err != nil {
-		return err
-	}
-	if err := copyFiles(dest, files, options); err != nil {
+	if err := copyFiles(root, files, dest, options); err != nil {
 		return err
 	}
 
