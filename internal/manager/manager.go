@@ -21,14 +21,15 @@ type Manager struct {
 type InstallOptions struct {
 	DownloadOptions *downloader.DownloaderOptions
 }
+type Mapping struct {
+	Src  string
+	Dest string
+}
 type Package struct {
-	URL      string
-	Version  string
-	Path     string
-	Mappings []struct {
-		Src  string
-		Dest string
-	}
+	URL         string
+	Version     string
+	Path        string
+	Mappings    []Mapping
 	storagePath string
 }
 
@@ -70,10 +71,7 @@ func (p *Package) Validate() error {
 		p.Path = "."
 	}
 	if len(p.Mappings) == 0 {
-		p.Mappings = []struct {
-			Src  string
-			Dest string
-		}{{
+		p.Mappings = []Mapping{{
 			Src:  "*",
 			Dest: ".",
 		}}
@@ -146,9 +144,9 @@ func makeLink(root string, name string, target string) (err error) {
 func (m *Manager) setupMappings(p *Package) (err error) {
 
 	var (
-		relpath string
-		fs      []string
-		stat    os.FileInfo
+		relpath  string
+		basename string
+		fs       []string
 	)
 
 	packagePath := path.Join(".apm", p.Hash())
@@ -157,8 +155,8 @@ func (m *Manager) setupMappings(p *Package) (err error) {
 
 	for _, m := range p.Mappings {
 		if m.Src == "" || m.Src == "." {
-			relpath, _ = filepath.Rel(m.Dest, packagePath)
-			if err = makeLink(m.Dest, relpath, packagePath); err != nil {
+			relpath, _ = filepath.Rel(path.Dir(m.Dest), packagePath)
+			if err = makeLink(path.Dir(m.Dest), m.Dest, relpath); err != nil {
 				return
 			}
 		} else {
@@ -166,17 +164,10 @@ func (m *Manager) setupMappings(p *Package) (err error) {
 				return
 			}
 			for _, f := range fs {
-				stat, _ = os.Stat(f)
-				if stat.IsDir() {
-					relpath, _ = filepath.Rel(path.Dir(m.Dest), f)
-					if err = makeLink(path.Dir(m.Dest), m.Dest, relpath); err != nil {
-						return
-					}
-				} else {
-					relpath, _ = filepath.Rel(path.Join(m.Dest, path.Base(f)), f)
-					if err = makeLink(m.Dest, path.Join(m.Dest, path.Base(f)), relpath); err != nil {
-						return
-					}
+				basename = path.Base(f)
+				relpath, _ = filepath.Rel(m.Dest, path.Dir(f))
+				if err = makeLink(m.Dest, path.Join(m.Dest, basename), path.Join(relpath, basename)); err != nil {
+					return
 				}
 			}
 		}
