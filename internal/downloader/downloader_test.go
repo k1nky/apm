@@ -24,21 +24,21 @@ type testFileFingerprint struct {
 
 var (
 	cloneCase map[string][]testFileFingerprint = map[string][]testFileFingerprint{
-		"dev": []testFileFingerprint{
+		"dev": {
 			{"4f260daf425fbcb28450a73b4875b2c3", "sub_b/sub_b.yml"},
 			{"ded11434ce59b89da43803f40599c25f", "sub_a/sub_a1/2.json"},
 			{"798ec063a2559fe9182c13a1801a72a2", "sub_a/sub_a1/1.json"},
 			{"29fc9c2a655b2713fc456f3caa5c7aa4", "sub_a/sub_a.yml"},
 			{"e77989ed21758e78331b20e477fc5582", "main.txt"},
 		},
-		"v2.0": []testFileFingerprint{
+		"v2.0": {
 			{"4f260daf425fbcb28450a73b4875b2c3", "sub_b/sub_b.yml"},
 			{"99914b932bd37a50b983c5e7c90ae93b", "sub_a/sub_a1/2.json"},
 			{"798ec063a2559fe9182c13a1801a72a2", "sub_a/sub_a1/1.json"},
 			{"29fc9c2a655b2713fc456f3caa5c7aa4", "sub_a/sub_a.yml"},
 			{"8b4e9455dfd3b112a055967deff47ea2", "main.txt"},
 		},
-		"6954198": []testFileFingerprint{
+		"6954198": {
 			{"8084392a5c5ea785d82d66efbdd118f4", "sub_b/sub_b.yml"},
 			{"ded11434ce59b89da43803f40599c25f", "sub_a/sub_a1/2.json"},
 			{"798ec063a2559fe9182c13a1801a72a2", "sub_a/sub_a1/1.json"},
