@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	DefaultDestinationMode = 0755
+	Mode0755 = 0755
 )
 
 type GlobOptions struct {
@@ -76,7 +76,7 @@ func ResolveGlob(root string, glob string, opts *GlobOptions) (files []string, e
 }
 
 func copyFiles(root string, files []string, dest string, options *CopyOptions) error {
-	if err := os.MkdirAll(dest, DefaultDestinationMode); err != nil {
+	if err := os.MkdirAll(dest, Mode0755); err != nil {
 		return err
 	}
 	for _, f := range files {
@@ -84,7 +84,7 @@ func copyFiles(root string, files []string, dest string, options *CopyOptions) e
 		destFile := path.Join(dest, relpath)
 		_, err := os.Stat(destFile)
 		if os.IsNotExist(err) {
-			os.MkdirAll(path.Dir(destFile), DefaultDestinationMode)
+			os.MkdirAll(path.Dir(destFile), Mode0755)
 			srcInfo, _ := os.Stat(f)
 			if srcInfo.IsDir() {
 				if err := copyDir(f, destFile); err != nil {
