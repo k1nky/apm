@@ -3,6 +3,7 @@ package manager
 import (
 	"crypto/md5"
 	"fmt"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/k1nky/apm/internal/copy"
 	"github.com/k1nky/apm/internal/downloader"
+	"github.com/sirupsen/logrus"
 )
 
 type Manager struct {
@@ -19,6 +21,7 @@ type Manager struct {
 	WorkDir string
 }
 type InstallOptions struct {
+	WorkDir         string
 	DownloadOptions *downloader.DownloaderOptions
 }
 type Mapping struct {
@@ -49,7 +52,7 @@ func (m *Manager) MakeStorage(dir string) (err error) {
 	}
 
 	m.Storage = dir
-	if err := os.MkdirAll(m.Storage, copy.DefaultDestinationMode); err != nil && !os.IsExist(err) {
+	if err := os.MkdirAll(m.Storage, copy.Mode0755); err != nil && !os.IsExist(err) {
 		return err
 	}
 
@@ -105,12 +108,15 @@ func (m *Manager) unpack(p *Package) (err error) {
 
 	hash := p.Hash()
 	p.storagePath = path.Join(m.Storage, hash)
-	if err = os.MkdirAll(p.storagePath, copy.DefaultDestinationMode); err != nil {
+	if err = os.MkdirAll(p.storagePath, copy.Mode0755); err != nil {
 		return err
 	}
 
 	// copy to storage
-	err = copy.Copy(m.TmpDir, []string{p.Path}, p.storagePath, nil)
+	if err = copy.Copy(m.TmpDir, p.storagePath, &copy.CopyOptions{Override: true}); err != nil {
+		return
+	}
+	err = os.RemoveAll(path.Join(p.storagePath, ".git"))
 	return
 }
 
@@ -121,21 +127,29 @@ func (m *Manager) setupWorkdir(p *Package) (err error) {
 		}
 	}
 
-	if err = os.MkdirAll(path.Join(m.WorkDir, ".apm"), copy.DefaultDestinationMode); err != nil {
-		return
+	if err = os.MkdirAll(path.Join(m.WorkDir, ".apm"), copy.Mode0755); err != nil {
+		if !os.IsExist(err) {
+			return
+		}
 	}
 	if err = os.Chdir(m.WorkDir); err != nil {
 		return
 	}
-	if err = os.Symlink(p.storagePath, path.Join(".apm", p.Hash())); err != nil {
-		return
-	}
+	err = makeLink(path.Join(".apm", p.Hash()), p.storagePath, true)
 	return
 }
 
-func makeLink(root string, name string, target string) (err error) {
-	if err = os.MkdirAll(root, copy.DefaultDestinationMode); err != nil {
-		return
+func makeLink(name string, target string, override bool) (err error) {
+	var info fs.FileInfo
+
+	if info, err = os.Lstat(name); err == nil {
+		if !override || info.Mode()&os.ModeSymlink == 0 {
+			return fmt.Errorf("file %s already exists", name)
+		}
+		if err = os.Remove(name); err != nil {
+			return
+		}
+		err = nil
 	}
 	err = os.Symlink(target, name)
 	return
@@ -154,9 +168,13 @@ func (m *Manager) setupMappings(p *Package) (err error) {
 	// TODO: validate mappings
 
 	for _, m := range p.Mappings {
+		m.Src = path.Join(p.Path, m.Src)
 		if m.Src == "" || m.Src == "." {
 			relpath, _ = filepath.Rel(path.Dir(m.Dest), packagePath)
-			if err = makeLink(path.Dir(m.Dest), m.Dest, relpath); err != nil {
+			if err = os.MkdirAll(path.Dir(m.Dest), copy.Mode0755); err != nil {
+				return
+			}
+			if err = makeLink(m.Dest, relpath, true); err != nil {
 				return
 			}
 		} else {
@@ -166,7 +184,10 @@ func (m *Manager) setupMappings(p *Package) (err error) {
 			for _, f := range fs {
 				basename = path.Base(f)
 				relpath, _ = filepath.Rel(m.Dest, path.Dir(f))
-				if err = makeLink(m.Dest, path.Join(m.Dest, basename), path.Join(relpath, basename)); err != nil {
+				if err = os.MkdirAll(m.Dest, copy.Mode0755); err != nil {
+					return
+				}
+				if err = makeLink(path.Join(m.Dest, basename), path.Join(relpath, basename), true); err != nil {
 					return
 				}
 			}
@@ -176,11 +197,23 @@ func (m *Manager) setupMappings(p *Package) (err error) {
 	return
 }
 
-func (m Manager) Install(p *Package, opts *InstallOptions) (err error) {
+func (m *Manager) Install(p *Package, opts *InstallOptions) (err error) {
+
+	contextLogger := logrus.WithFields(logrus.Fields{
+		"url":     p.URL,
+		"version": p.Version,
+		"path":    p.Path,
+	})
+	contextLogger.Info("installing a package")
 
 	if err := p.Validate(); err != nil {
 		return err
 	}
+	if opts == nil {
+		opts = &InstallOptions{}
+	}
+	m.WorkDir = opts.WorkDir
+
 	if err = m.download(p, opts.DownloadOptions); err != nil {
 		return
 	}
@@ -198,5 +231,6 @@ func (m Manager) Install(p *Package, opts *InstallOptions) (err error) {
 		return
 	}
 
+	contextLogger.Info("the package is installed")
 	return nil
 }
