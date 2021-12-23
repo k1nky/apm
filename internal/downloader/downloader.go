@@ -3,6 +3,7 @@ package downloader
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -69,6 +70,9 @@ func (d *Downloader) auth() (method transport.AuthMethod, err error) {
 }
 
 func (d *Downloader) clone(dir string, url string) (err error) {
+	if !strings.HasPrefix(url, "http") {
+		url = "https://" + url
+	}
 	cloneOptions := &git.CloneOptions{
 		URL:          url,
 		SingleBranch: false,
@@ -90,7 +94,6 @@ func (d *Downloader) Switch(dir string, version string) (err error) {
 		wt   *git.Worktree
 		hash *plumbing.Hash
 		repo *git.Repository
-		// revisions []plumbing.Revision = []plumbing.Revision{version, fmt.Sprintf("origin/{}", version)}
 	)
 
 	revisions := []plumbing.Revision{plumbing.Revision(version), plumbing.Revision("origin/" + version)}
