@@ -1,7 +1,6 @@
 package copy
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"path"
@@ -34,58 +33,70 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-func testCopy(what string, want []string) (err error) {
-	tmpdir, err := os.MkdirTemp("", "apm-copy-dest")
-	if err != nil {
-		return
-	}
-	defer os.RemoveAll(tmpdir)
-
-	fs, err := ResolveGlob(testSrcDir, what, nil)
-	if err != nil {
-		return err
-	}
-	if err = Copy(testSrcDir, fs, tmpdir, nil); err != nil {
-		return
-	}
-	for _, v := range want {
-		if _, err := os.Stat(path.Join(tmpdir, v)); os.IsNotExist(err) {
-			return fmt.Errorf("expected file %s does not exist", v)
-		}
+func TestCopyDir(t *testing.T) {
+	what := []string{"sub_b", "."}
+	want := [][]string{
+		{"sub_b/sub_b.yml"},
+		{"sub_b/sub_b.yml", "sub_a/sub_a1/2.json",
+			"sub_a/sub_a1/1.json", "sub_a/sub_a.yml", "main.txt"},
 	}
 
-	return
-}
+	for k, v := range what {
+		t.Run(v, func(t *testing.T) {
+			tmpdir, err := os.MkdirTemp("", "apm-copy-dest")
+			if err != nil {
+				return
+			}
+			defer os.RemoveAll(tmpdir)
 
-func TestCopyAll(t *testing.T) {
-	want := []string{"sub_b/sub_b.yml", "sub_a/sub_a1/2.json",
-		"sub_a/sub_a1/1.json", "sub_a/sub_a.yml", "main.txt"}
-	if err := testCopy("*", want); err != nil {
-		t.Error(err)
-	}
-}
+			if err := Copy(path.Join(testSrcDir, v), path.Join(tmpdir, v), nil); err != nil {
+				t.Error(err)
+				return
+			}
+			for _, w := range want[k] {
+				if _, err := os.Stat(path.Join(tmpdir, w)); os.IsNotExist(err) {
+					t.Errorf("expected file %s does not exist", w)
+				}
+			}
 
-func TestCopySubdir(t *testing.T) {
-	want := []string{"sub_a/sub_a1/2.json", "sub_a/sub_a1/1.json"}
-	if err := testCopy("sub_a/sub_a1", want); err != nil {
-		t.Error(err)
+		})
 	}
 }
 
-func TestCopyWildcard(t *testing.T) {
-	want := []string{"sub_a/sub_a1/2.json", "sub_a/sub_a1/1.json"}
-	if err := testCopy("sub_a/sub_a1/*.json", want); err != nil {
-		t.Error(err)
+func TestCopyFile(t *testing.T) {
+	what := []string{"main.txt", "sub_a/sub_a.yml"}
+	want := [][]string{
+		{"main.txt"},
+		{"sub_a/sub_a.yml"},
+	}
+
+	for k, v := range what {
+		t.Run(v, func(t *testing.T) {
+			tmpdir, err := os.MkdirTemp("", "apm-copy-dest")
+			if err != nil {
+				return
+			}
+			defer os.RemoveAll(tmpdir)
+
+			dest := path.Join(tmpdir, v)
+			os.MkdirAll(path.Dir(dest), Mode0755)
+			if err := Copy(path.Join(testSrcDir, v), dest, nil); err != nil {
+				t.Error(err)
+				return
+			}
+			for _, w := range want[k] {
+				if _, err := os.Stat(path.Join(tmpdir, w)); os.IsNotExist(err) {
+					t.Errorf("expected file %s does not exist", w)
+				}
+			}
+
+		})
 	}
 }
 
-// TODO: Seems doublestart is not supported
-// func TestCopyDoblestart(t *testing.T) {
-// 	want := []string{"sub_a/sub_a1/2.json", "sub_a/sub_a1/1.json"}
-// 	if err := testCopy("**/*.json", want); err != nil {
-// 		t.Error(err)
-// 	}
-// }
+// TODO: TestResolveGlob
+// want := []string{"sub_b/sub_b.yml", "sub_a/sub_a1/2.json",
+// "sub_a/sub_a1/1.json", "sub_a/sub_a.yml", "main.txt"}
 
 func TestMain(m *testing.M) {
 	var err error

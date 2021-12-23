@@ -3,6 +3,7 @@ package copy
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path"
@@ -75,39 +76,13 @@ func ResolveGlob(root string, glob string, opts *GlobOptions) (files []string, e
 	return
 }
 
-func copyFiles(root string, files []string, dest string, options *CopyOptions) error {
-	if err := os.MkdirAll(dest, Mode0755); err != nil {
-		return err
-	}
-	for _, f := range files {
-		relpath, _ := filepath.Rel(root, f)
-		destFile := path.Join(dest, relpath)
-		_, err := os.Stat(destFile)
-		if os.IsNotExist(err) {
-			os.MkdirAll(path.Dir(destFile), Mode0755)
-			srcInfo, _ := os.Stat(f)
-			if srcInfo.IsDir() {
-				if err := copyDir(f, destFile); err != nil {
-					return err
-				}
-			} else {
-				if _, err := copyFile(f, destFile); err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-func copyFile(src string, dest string) (int64, error) {
-	sfs, err := os.Stat(src)
+func CopyFile(src string, dest string) (int64, error) {
+	info, err := os.Stat(src)
 	if err != nil {
 		return 0, err
 	}
 
-	if !sfs.Mode().IsRegular() {
+	if !info.Mode().IsRegular() {
 		return 0, fmt.Errorf("%s is not a regular file", src)
 	}
 
@@ -127,7 +102,7 @@ func copyFile(src string, dest string) (int64, error) {
 	return nBytes, err
 }
 
-func copyDir(src string, dest string) (err error) {
+func CopyDir(src string, dest string) (err error) {
 	var fds []os.FileInfo
 	var srcInfo os.FileInfo
 
@@ -147,11 +122,11 @@ func copyDir(src string, dest string) (err error) {
 		dstfp := path.Join(dest, fd.Name())
 
 		if fd.IsDir() {
-			if err = copyDir(srcfp, dstfp); err != nil {
+			if err = CopyDir(srcfp, dstfp); err != nil {
 				fmt.Println(err)
 			}
 		} else {
-			if _, err = copyFile(srcfp, dstfp); err != nil {
+			if _, err = CopyFile(srcfp, dstfp); err != nil {
 				fmt.Println(err)
 			}
 		}
@@ -159,22 +134,29 @@ func copyDir(src string, dest string) (err error) {
 	return nil
 }
 
-func Copy(root string, files []string, dest string, options *CopyOptions) error {
+func Copy(src string, dest string, options *CopyOptions) (err error) {
+	var info fs.FileInfo
+
 	if options == nil {
 		options = &CopyOptions{}
 	}
-	if err := options.Validate(); err != nil {
-		return err
+	if err = options.Validate(); err != nil {
+		return
 	}
-	if _, err := os.Stat(dest); os.IsExist(err) && options.Override {
-		if err := os.RemoveAll(dest); err != nil {
+	if _, err = os.Stat(dest); err == nil && options.Override {
+		if err = os.RemoveAll(dest); err != nil {
 			return err
 		}
 	}
 
-	if err := copyFiles(root, files, dest, options); err != nil {
-		return err
+	if info, err = os.Stat(src); err != nil {
+		return
+	}
+	if info.Mode().IsDir() {
+		err = CopyDir(src, dest)
+	} else {
+		_, err = CopyFile(src, dest)
 	}
 
-	return nil
+	return
 }
