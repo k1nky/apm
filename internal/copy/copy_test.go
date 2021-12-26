@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"sort"
 	"testing"
 
 	"github.com/go-git/go-git/v5"
@@ -94,9 +95,25 @@ func TestCopyFile(t *testing.T) {
 	}
 }
 
-// TODO: TestResolveGlob
-// want := []string{"sub_b/sub_b.yml", "sub_a/sub_a1/2.json",
-// "sub_a/sub_a1/1.json", "sub_a/sub_a.yml", "main.txt"}
+func TestResolveGlob(t *testing.T) {
+	what := []string{"*", "sub_b/sub_b.yml", "sub_a/sub_a1/*.json"}
+	want := [][]string{
+		{"main.txt", "sub_a", "sub_b"},
+		{"sub_b/sub_b.yml"},
+		{"sub_a/sub_a1/1.json", "sub_a/sub_a1/2.json"},
+	}
+	for k, v := range what {
+		fs, err := ResolveGlob(testSrcDir, v, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		for _, f := range fs {
+			if sort.SearchStrings(want[k], f) == len(want[k]) {
+				t.Error("expected file ", f)
+			}
+		}
+	}
+}
 
 func TestMain(m *testing.M) {
 	var err error

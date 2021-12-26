@@ -12,42 +12,35 @@ import (
 )
 
 const (
+	// Mode0755 is file mode 0755
 	Mode0755 = 0755
 )
 
 type GlobOptions struct {
+	// Exclude describes list of files which will be excluded from glob resolution
 	Exclude []string
 }
 
 type CopyOptions struct {
+	// Override existed destination directory
 	Override bool
 }
 
-func (opt *CopyOptions) Validate() error {
-	return nil
-}
-
-func (opts *GlobOptions) Validate() error {
-	if len(opts.Exclude) == 0 {
-		opts.Exclude = []string{".git"}
-	}
-	return nil
-}
-
-func ValidateRoot(root string) (string, error) {
+func validateRoot(root string) (string, error) {
 	if root == "" {
 		return os.Getwd()
 	}
 	return root, nil
 }
 
-func ResolveGlob(root string, glob string, opts *GlobOptions) (files []string, err error) {
+// ResolveGlob returns list of files within `root` and matched to `glob`
+func ResolveGlob(root string, glob string, options *GlobOptions) (files []string, err error) {
 
-	root, _ = ValidateRoot(root)
-	if opts == nil {
-		opts = &GlobOptions{}
+	root, _ = validateRoot(root)
+	if options == nil {
+		options = &GlobOptions{}
 	}
-	if err := opts.Validate(); err != nil {
+	if err := options.Validate(); err != nil {
 		return nil, err
 	}
 
@@ -57,10 +50,10 @@ func ResolveGlob(root string, glob string, opts *GlobOptions) (files []string, e
 	}
 	dirtyFiles := append(files, fs...)
 
-	if len(opts.Exclude) == 0 {
+	if len(options.Exclude) == 0 {
 		files = dirtyFiles
 	} else {
-		for _, exclude := range opts.Exclude {
+		for _, exclude := range options.Exclude {
 			re, err := regexp.Compile(exclude)
 			if err != nil {
 				return files, err
@@ -76,6 +69,21 @@ func ResolveGlob(root string, glob string, opts *GlobOptions) (files []string, e
 	return
 }
 
+// Validate copy options
+func (options *CopyOptions) Validate() error {
+	return nil
+}
+
+// Validate glob options. Directory .git is skipped by default.
+func (options *GlobOptions) Validate() error {
+	if len(options.Exclude) == 0 {
+		options.Exclude = []string{".git"}
+	}
+	return nil
+}
+
+// CopyFile makes copy of `src` to `dest` and returns a number of copied bytes.
+// `src` must be a regular file. Parent directory of `dest` must be existed.
 func CopyFile(src string, dest string) (int64, error) {
 	info, err := os.Stat(src)
 	if err != nil {
@@ -102,6 +110,8 @@ func CopyFile(src string, dest string) (int64, error) {
 	return nBytes, err
 }
 
+// CopyDir makes recursive copy of a directory into another directory.
+// If the destination directory does not exist it will be created.
 func CopyDir(src string, dest string) (err error) {
 	var fds []os.FileInfo
 	var srcInfo os.FileInfo
@@ -134,6 +144,7 @@ func CopyDir(src string, dest string) (err error) {
 	return nil
 }
 
+// Copy makes copy of a file or directory (`src`) within a directory (`dest`).
 func Copy(src string, dest string, options *CopyOptions) (err error) {
 	var info fs.FileInfo
 
