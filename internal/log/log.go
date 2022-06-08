@@ -18,10 +18,15 @@ const (
 type Formatter struct {
 	// Timestamp format
 	TimestampFormat string
+	OnlyTime        bool
 	// Available standard keys: time, msg, lvl
 	// Also can include custom fields but limited to strings.
 	// All of fields need to be wrapped inside %% i.e %time% %msg%
 	LogFormat string
+}
+
+func timeFormat(t time.Time) string {
+	return fmt.Sprintf("%02d:%02d:%02d", t.Hour(), t.Minute(), t.Second())
 }
 
 // Format building log message.
@@ -36,7 +41,11 @@ func (f *Formatter) Format(entry *logrus.Entry) ([]byte, error) {
 		timestampFormat = defaultTimestampFormat
 	}
 
-	output = strings.Replace(output, "%time%", entry.Time.Format(timestampFormat), 1)
+	if f.OnlyTime {
+		output = strings.Replace(output, "%time%", timeFormat(entry.Time), 1)
+	} else {
+		output = strings.Replace(output, "%time%", entry.Time.Format(timestampFormat), 1)
+	}
 
 	output = strings.Replace(output, "%msg%", entry.Message, 1)
 
