@@ -10,6 +10,7 @@ import (
 func init() {
 	logrus.SetFormatter(&apmlog.Formatter{
 		LogFormat: "[%lvl%]: %time% - %msg% %fields%\n",
+		OnlyTime:  true,
 	})
 }
 

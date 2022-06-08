@@ -22,7 +22,8 @@ type Manager struct {
 }
 type InstallOptions struct {
 	WorkDir         string
-	DownloadOptions *downloader.DownloaderOptions
+	DownloadOptions *downloader.Options
+	OnceDowload     bool
 }
 type Mapping struct {
 	Src  string
@@ -42,6 +43,13 @@ const (
 	DefaultTmpPrefix   = "apm-"
 )
 
+func (opts *InstallOptions) Validate() error {
+	if opts.DownloadOptions == nil {
+		opts.DownloadOptions = downloader.DefaultOptions()
+	}
+	return nil
+}
+
 func (m *Manager) MakeStorage(dir string) (err error) {
 	if len(dir) == 0 {
 		dir = DefaultStoragePath
@@ -60,7 +68,7 @@ func (m *Manager) MakeStorage(dir string) (err error) {
 }
 
 func (p Package) Hash() string {
-	return fmt.Sprintf("%x", md5.Sum([]byte(p.URL+p.Version+p.Path)))
+	return fmt.Sprintf("%x@%s", md5.Sum([]byte(p.URL+p.Path)), p.Version)
 }
 
 func (p *Package) Validate() error {
@@ -82,13 +90,14 @@ func (p *Package) Validate() error {
 	return nil
 }
 
-func (m Manager) cleanup() {
+func (m *Manager) cleanup() {
 	if m.TmpDir != "" {
 		os.RemoveAll(m.TmpDir)
+		m.TmpDir = ""
 	}
 }
 
-func (m *Manager) download(p *Package, opts *downloader.DownloaderOptions) (err error) {
+func (m *Manager) download(p *Package, opts *downloader.Options) (err error) {
 
 	d := downloader.NewDownloader()
 	if m.TmpDir == "" {
@@ -97,7 +106,8 @@ func (m *Manager) download(p *Package, opts *downloader.DownloaderOptions) (err 
 		}
 	}
 
-	err = d.Get(p.URL, p.Version, m.TmpDir, opts)
+	// TODO: newUrl?
+	_, err = d.Get(p.URL, p.Version, m.TmpDir, opts)
 	return
 }
 
@@ -177,7 +187,7 @@ func (m *Manager) setupMappings(p *Package) (err error) {
 			if err = makeLink(m.Dest, relpath, true); err != nil {
 				return
 			}
-		} else {
+		} else if strings.Contains(m.Src, "*") {
 			if fs, err = copy.ResolveGlob(packagePath, m.Src, nil); err != nil {
 				return
 			}
@@ -191,33 +201,58 @@ func (m *Manager) setupMappings(p *Package) (err error) {
 					return
 				}
 			}
+		} else {
+			relpath, _ = filepath.Rel(path.Dir(m.Dest), path.Join(packagePath, m.Src))
+			if err = os.MkdirAll(path.Dir(m.Dest), copy.Mode0755); err != nil {
+				return
+			}
+			if err = makeLink(m.Dest, relpath, true); err != nil {
+				return
+			}
 		}
 	}
 
 	return
 }
 
-func (m *Manager) Install(p *Package, opts *InstallOptions) (err error) {
+func (m *Manager) Install(pkgs []*Package, opts *InstallOptions) (err error) {
 
-	contextLogger := logrus.WithFields(logrus.Fields{
-		"url":     p.URL,
-		"version": p.Version,
-		"path":    p.Path,
-	})
-	contextLogger.Info("installing a package")
-
-	if err := p.Validate(); err != nil {
-		return err
-	}
-	if opts == nil {
-		opts = &InstallOptions{}
-	}
-	m.WorkDir = opts.WorkDir
-
-	if err = m.download(p, opts.DownloadOptions); err != nil {
-		return
-	}
 	defer m.cleanup()
+
+	opts.Validate()
+
+	for _, p := range pkgs {
+		contextLogger := logrus.WithFields(logrus.Fields{
+			"url":     p.URL,
+			"version": p.Version,
+			"path":    p.Path,
+		})
+		contextLogger.Info("installing a package")
+
+		if err := p.Validate(); err != nil {
+			return err
+		}
+		if opts == nil {
+			opts = &InstallOptions{}
+		}
+		m.WorkDir = opts.WorkDir
+
+		if err = m.download(p, opts.DownloadOptions); err != nil {
+			return
+		}
+		opts.DownloadOptions.OnlySwitch = opts.OnceDowload
+
+		if err = m.setup(p); err != nil {
+			return
+		}
+
+		contextLogger.Info("the package is installed")
+	}
+
+	return nil
+}
+
+func (m *Manager) setup(p *Package) (err error) {
 
 	if err = m.unpack(p); err != nil {
 		return
@@ -231,6 +266,5 @@ func (m *Manager) Install(p *Package, opts *InstallOptions) (err error) {
 		return
 	}
 
-	contextLogger.Info("the package is installed")
 	return nil
 }
