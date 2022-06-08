@@ -3,7 +3,9 @@ package downloader
 import (
 	"errors"
 	"fmt"
-	"net/url"
+	gourl "net/url"
+	"os"
+	"sort"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
@@ -13,62 +15,56 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/go-git/go-git/v5/storage/memory"
+	"github.com/sirupsen/logrus"
 )
 
 const (
-	DownloaderNoAuth = iota
-	DownloaderSSHAgentAuth
-	DownloaderBasicAuth
+	NoAuth = iota
+	SSHAgentAuth
+	BasicAuth
 )
 
-type DownloaderAuthType int
+type AuthType int
 
-type DownloaderOptions struct {
+type Options struct {
 	// TODO: Override existing directory
-	Override bool
-	// TODO: Read .gitconfig to override URL
+	Override     bool
 	UseGitConfig bool
-	Auth         DownloaderAuthType
+	Auth         AuthType
 	Username     string
 	Password     string
+	OnlySwitch   bool
 }
 
 type Downloader struct {
-	options *DownloaderOptions
+	options *Options
 }
 
 func NewDownloader() *Downloader {
 	return &Downloader{
-		options: DefaultDownloaderOptions(),
+		options: DefaultOptions(),
 	}
 }
 
-func DefaultDownloaderOptions() *DownloaderOptions {
-	return &DownloaderOptions{
+func DefaultOptions() *Options {
+	return &Options{
 		Override:     true,
 		UseGitConfig: true,
-		Auth:         DownloaderNoAuth,
+		Auth:         NoAuth,
+		OnlySwitch:   false,
 	}
 }
 
-func ValidateUrl(s string) (string, error) {
-	if !strings.HasPrefix(s, "http") {
-		s = "https://" + s
-	}
-	_, err := url.Parse(s)
-	return s, err
-}
-
-func (options *DownloaderOptions) Validate() (err error) {
+func (options *Options) Validate() (err error) {
 	return nil
 }
 
 func (d *Downloader) auth() (method transport.AuthMethod, err error) {
 	switch d.options.Auth {
-	case DownloaderNoAuth:
-	case DownloaderSSHAgentAuth:
+	case NoAuth:
+	case SSHAgentAuth:
 		method, err = ssh.NewSSHAgentAuth("")
-	case DownloaderBasicAuth:
+	case BasicAuth:
 		method = &http.BasicAuth{
 			Username: d.options.Username,
 			Password: d.options.Password,
@@ -87,6 +83,9 @@ func (d *Downloader) clone(dir string, url string) (err error) {
 		Tags:         git.AllTags,
 		RemoteName:   "origin",
 	}
+	if logrus.GetLevel() < logrus.ErrorLevel {
+		cloneOptions.Progress = os.Stdout
+	}
 	if method, err := d.auth(); err != nil {
 		return err
 	} else if method != nil {
@@ -94,6 +93,116 @@ func (d *Downloader) clone(dir string, url string) (err error) {
 	}
 	_, err = git.PlainClone(dir, false, cloneOptions)
 
+	return
+}
+
+func (d *Downloader) retrieveRemoteVersion(url string, options *Options) (versions []string, err error) {
+	listOptions := &git.ListOptions{
+		InsecureSkipTLS: true,
+	}
+	if method, err := d.auth(); err != nil {
+		return versions, err
+	} else if method != nil {
+		listOptions.Auth = method
+	}
+
+	remrepo := git.NewRemote(memory.NewStorage(), &config.RemoteConfig{
+		Name: "origin",
+		URLs: []string{url},
+	})
+
+	refs, err := remrepo.List(listOptions)
+	if err != nil {
+		return versions, err
+	}
+	for _, ref := range refs {
+		if ref.Name().IsTag() || ref.Name().IsBranch() {
+			versions = append(versions, ref.Name().Short())
+		}
+	}
+
+	return
+}
+
+func (d *Downloader) RewriteURLFromGitConfig(url string) string {
+	if cfg, err := config.LoadConfig(config.GlobalScope); err != nil {
+		logrus.Debug(err)
+	} else {
+		for _, section := range cfg.Raw.Sections {
+			if section.Name == "url" {
+				for _, subsection := range section.Subsections {
+					for _, opt := range subsection.Options {
+						if opt.Key == "insteadOf" && strings.HasPrefix(url, opt.Value) {
+							return strings.ReplaceAll(url, opt.Value, subsection.Name)
+						}
+					}
+				}
+			}
+		}
+	}
+	return url
+}
+
+func (d *Downloader) prepareUrl(url string) (newUrl string, err error) {
+	newUrl = url
+	if !strings.HasPrefix(url, "http") && !strings.HasPrefix(url, "ssh") {
+		newUrl = "https://" + url
+	}
+	if _, err = gourl.Parse(newUrl); err != nil {
+		return
+	}
+
+	if d.options.UseGitConfig {
+		newUrl = d.RewriteURLFromGitConfig(newUrl)
+	}
+
+	return
+}
+
+func (d *Downloader) prepare(url string, options *Options) (newUrl string, err error) {
+	if options == nil {
+		d.options = DefaultOptions()
+	} else {
+		d.options = options
+	}
+	if err = d.options.Validate(); err != nil {
+		return
+	}
+
+	newUrl, err = d.prepareUrl(url)
+
+	if strings.HasPrefix(newUrl, "ssh") {
+		d.options.Auth = SSHAgentAuth
+	}
+	return
+}
+
+// Get a package from `url` with `version` to `dest` directory.
+// If scheme is not specified for url will be used 'https'.
+// Default version is 'master'.
+func (d *Downloader) Get(url string, version string, dest string, options *Options) (newUrl string, err error) {
+
+	if newUrl, err = d.prepare(url, options); err != nil {
+		return
+	}
+
+	if !d.options.OnlySwitch {
+		if err = d.clone(dest, newUrl); err != nil {
+			return
+		}
+	}
+	err = d.Switch(dest, version)
+
+	return
+}
+
+func (d *Downloader) FetchVersion(url string, options *Options) (versions []string, err error) {
+	if url, err = d.prepare(url, options); err != nil {
+		return
+	}
+
+	versions, err = d.retrieveRemoteVersion(url, options)
+	sort.Strings(versions)
 	return
 }
 
@@ -126,70 +235,5 @@ func (d *Downloader) Switch(dir string, version string) (err error) {
 	err = wt.Checkout(&git.CheckoutOptions{
 		Hash: *hash,
 	})
-	return
-}
-
-func (d *Downloader) Get(url string, version string, dest string, options *DownloaderOptions) (err error) {
-
-	if options == nil {
-		options = DefaultDownloaderOptions()
-	}
-	if err = options.Validate(); err != nil {
-		return
-	}
-	d.options = options
-	if url, err = ValidateUrl(url); err != nil {
-		return
-	}
-
-	if err = d.clone(dest, url); err != nil {
-		return err
-	}
-	err = d.Switch(dest, version)
-
-	return
-}
-
-func (d *Downloader) retrieveRemoteVersion(url string, options *DownloaderOptions) (versions []string, err error) {
-	listOptions := &git.ListOptions{
-		InsecureSkipTLS: true,
-	}
-	if method, err := d.auth(); err != nil {
-		return versions, err
-	} else if method != nil {
-		listOptions.Auth = method
-	}
-
-	remrepo := git.NewRemote(memory.NewStorage(), &config.RemoteConfig{
-		Name: "origin",
-		URLs: []string{url},
-	})
-
-	refs, err := remrepo.List(listOptions)
-	if err != nil {
-		return versions, err
-	}
-	for _, ref := range refs {
-		if ref.Name().IsTag() || ref.Name().IsBranch() {
-			versions = append(versions, ref.Name().Short())
-		}
-	}
-
-	return
-}
-
-func (d *Downloader) FetchVersion(url string, options *DownloaderOptions) (versions []string, err error) {
-	if options == nil {
-		options = DefaultDownloaderOptions()
-	}
-	if err = options.Validate(); err != nil {
-		return
-	}
-	d.options = options
-	if url, err = ValidateUrl(url); err != nil {
-		return
-	}
-
-	versions, err = d.retrieveRemoteVersion(url, options)
 	return
 }

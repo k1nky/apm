@@ -87,7 +87,7 @@ func testGet(version string, want []testFileFingerprint) (err error) {
 	}
 	defer tearDown(tmpdir)
 
-	if err = d.Get(DefTestPublicURL, version, tmpdir, &DownloaderOptions{}); err != nil {
+	if _, err = d.Get(DefTestPublicURL, version, tmpdir, &Options{}); err != nil {
 		return
 	}
 
@@ -101,7 +101,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestDownloaderOptions(t *testing.T) {
-	opt := &DownloaderOptions{}
+	opt := &Options{}
 	if err := opt.Validate(); err != nil {
 		t.Error(err)
 		return
