@@ -28,14 +28,12 @@ type AuthType int
 
 type Options struct {
 	// TODO: Override existing directory
-	Override bool
-	// Substitue URL with a `URL`.`insteadOf` value from global git config
+	Override     bool
 	UseGitConfig bool
 	Auth         AuthType
 	Username     string
 	Password     string
-	// Nothing will be downloaded, only switch destination repository
-	OnlySwitch bool
+	OnlySwitch   bool
 }
 
 type Downloader struct {
@@ -126,12 +124,10 @@ func (d *Downloader) retrieveRemoteVersion(url string, options *Options) (versio
 	return
 }
 
-// RewriteURLFromGitConfig substitutes URL with a `URL`.`insteadOf` value from global git config
-func (d *Downloader) RewriteURLFromGitConfig(url string) string {
+func RewriteURLFromGitConfig(url string) string {
 	if cfg, err := config.LoadConfig(config.GlobalScope); err != nil {
 		logrus.Debug(err)
 	} else {
-		// workaround: cfg.URLs provides only last url when it is not unique
 		for _, section := range cfg.Raw.Sections {
 			if section.Name == "url" {
 				for _, subsection := range section.Subsections {
@@ -144,7 +140,6 @@ func (d *Downloader) RewriteURLFromGitConfig(url string) string {
 			}
 		}
 	}
-
 	return url
 }
 
@@ -158,7 +153,7 @@ func (d *Downloader) prepareUrl(url string) (newUrl string, err error) {
 	}
 
 	if d.options.UseGitConfig {
-		newUrl = d.RewriteURLFromGitConfig(newUrl)
+		newUrl = RewriteURLFromGitConfig(newUrl)
 	}
 
 	return
