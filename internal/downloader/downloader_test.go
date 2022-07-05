@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	DefTestPublicURL = "https://bitbucket.org/bitjackass/apm-test-example"
+	DefTestPublicURL = "https://github.com/k1nky/ansible-simple-role.git"
 	DefAPMGetTmpDir  = "/tmp/apm-get"
 )
 
@@ -25,25 +25,19 @@ type testFileFingerprint struct {
 var (
 	cloneCase map[string][]testFileFingerprint = map[string][]testFileFingerprint{
 		"dev": {
-			{"4f260daf425fbcb28450a73b4875b2c3", "sub_b/sub_b.yml"},
-			{"ded11434ce59b89da43803f40599c25f", "sub_a/sub_a1/2.json"},
-			{"798ec063a2559fe9182c13a1801a72a2", "sub_a/sub_a1/1.json"},
-			{"29fc9c2a655b2713fc456f3caa5c7aa4", "sub_a/sub_a.yml"},
-			{"e77989ed21758e78331b20e477fc5582", "main.txt"},
+			{"0be56bccb50804c305f4777f925b43bc", "defaults/main.yml"},
+			{"b2bb3d0065e6282093a34942d73ff3e8", "tasks/main.yml"},
+			{"97206668bdd762c00997fbcf308b5697", "templates/motd.j2"},
 		},
-		"v2.0": {
-			{"4f260daf425fbcb28450a73b4875b2c3", "sub_b/sub_b.yml"},
-			{"99914b932bd37a50b983c5e7c90ae93b", "sub_a/sub_a1/2.json"},
-			{"798ec063a2559fe9182c13a1801a72a2", "sub_a/sub_a1/1.json"},
-			{"29fc9c2a655b2713fc456f3caa5c7aa4", "sub_a/sub_a.yml"},
-			{"8b4e9455dfd3b112a055967deff47ea2", "main.txt"},
+		"v1.0": {
+			{"0be56bccb50804c305f4777f925b43bc", "defaults/main.yml"},
+			{"b2bb3d0065e6282093a34942d73ff3e8", "tasks/main.yml"},
+			{"642fb044ab16285b7db45080fb0d5678", "templates/motd.j2"},
 		},
-		"6954198": {
-			{"8084392a5c5ea785d82d66efbdd118f4", "sub_b/sub_b.yml"},
-			{"ded11434ce59b89da43803f40599c25f", "sub_a/sub_a1/2.json"},
-			{"798ec063a2559fe9182c13a1801a72a2", "sub_a/sub_a1/1.json"},
-			{"29fc9c2a655b2713fc456f3caa5c7aa4", "sub_a/sub_a.yml"},
-			{"71ccb7a35a452ea8153b6d920f9f190e", "main.txt"},
+		"39d3c976b8d06bb81f37e806ff915c05253d16ad": {
+			{"0be56bccb50804c305f4777f925b43bc", "ansible-simple-role/defaults/main.yml"},
+			{"b2bb3d0065e6282093a34942d73ff3e8", "ansible-simple-role/tasks/main.yml"},
+			{"97206668bdd762c00997fbcf308b5697", "ansible-simple-role/templates/motd.j2"},
 		},
 	}
 )
@@ -109,13 +103,13 @@ func TestDownloaderOptions(t *testing.T) {
 }
 
 func TestGetByTag(t *testing.T) {
-	if err := testGet("v2.0", cloneCase["v2.0"]); err != nil {
+	if err := testGet("v1.0", cloneCase["v2.0"]); err != nil {
 		t.Error(err)
 	}
 }
 
 func TestGetByHash(t *testing.T) {
-	if err := testGet("6954198", cloneCase["6954198"]); err != nil {
+	if err := testGet("39d3c97", cloneCase["39d3c97"]); err != nil {
 		t.Error(err)
 	}
 }
