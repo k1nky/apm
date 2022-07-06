@@ -24,11 +24,11 @@ type InstallCmd struct {
 type AddCmd struct {
 	Url      string            `kong:"help='Package URL, will be skipped when installation from file is set.',name='url',short='u',arg,placeholder='url',optional"`
 	Path     string            `kong:"help='Path to .apkg in the remote repository',name='path',short='p',default='.',optional"`
-	Mappings map[string]string `kong:"help='Package mappings, will mount a source file or directory within a destination directory. Example, <remote_file_or_dir>@<version>=./roles',name='mappings',short='m',default='\"*@master=.\"',optional"`
+	Mappings map[string]string `kong:"help='Package mappings, will mount a source file or directory within a destination directory. Skiping if Path is set. Example, <remote_file_or_dir>@<version>=./roles',name='mappings',short='m',default='\"*@master=.\"',optional"`
 	File     string            `kong:"help='Path to a file with requirements',name='file',short='f',optional,default='requirements.yml'"`
 	Save     bool              `kong:"help='Save added package to requirements',name='save',short='s',optional,default=false"`
-	// NoLink bool
-	// Boost     bool
+	// TODO: NoLink bool
+	// TODO: Boost     bool
 }
 
 type ListCmd struct {
@@ -134,7 +134,7 @@ func (cmd *AddCmd) Run(ctx *Context) error {
 		})
 		requirements.Add(parser.Package{
 			Src:      url,
-			Mappings: []parser.ReqiurementMapping{{SrcDest: parser.SrcDest{Src: src, Dest: v}, Version: version}},
+			Mappings: []parser.Mapping{{SrcDest: parser.SrcDest{Src: src, Dest: v}, Version: version}},
 		})
 	}
 	if err := m.Install(packages, &manager.InstallOptions{WorkDir: ctx.WorkDir}); err != nil {
@@ -165,8 +165,8 @@ var CLI struct {
 	Debug        bool   `kong:"help='Enable debug mode.',name='debug'"`
 	WorkDir      string `kong:"help='Working directory with .apm mount point. It is current directory by default',name='workdir',short='w',optional"`
 	UseGitConfig bool   `kong:"help='Use gitconfig to override url',name='use-gitconfig',default=true,optional"`
-	// User         string
-	// AuthType     string
+	// TODO: User         string
+	// TODO: AuthType     string
 	Install InstallCmd `kong:"cmd,help='Install a package'"`
 	List    ListCmd    `kong:"cmd,help='List remote versions'"`
 	Add     AddCmd     `kong:"cmd,help='Add a package'"`
