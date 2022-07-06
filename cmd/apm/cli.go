@@ -12,8 +12,9 @@ import (
 )
 
 type Context struct {
-	Debug   bool
-	WorkDir string
+	Debug        bool
+	UseGitConfig bool
+	WorkDir      string
 }
 
 type InstallCmd struct {
@@ -25,9 +26,9 @@ type AddCmd struct {
 	Path     string            `kong:"help='Path to .apkg in the remote repository',name='path',short='p',default='.',optional"`
 	Mappings map[string]string `kong:"help='Package mappings, will mount a source file or directory within a destination directory. Example, <remote_file_or_dir>@<version>=./roles',name='mappings',short='m',default='\"*@master=.\"',optional"`
 	File     string            `kong:"help='Path to a file with requirements',name='file',short='f',optional,default='requirements.yml'"`
+	Save     bool              `kong:"help='Save added package to requirements',name='save',short='s',optional,default=false"`
 	// NoLink bool
 	// Boost     bool
-	// Save bool
 }
 
 type ListCmd struct {
@@ -62,6 +63,22 @@ func loadRequirements(filename string) (req *parser.Requirements, err error) {
 	return req, err
 }
 
+func saveRequirements(filename string, req *parser.Requirements) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		logrus.Error(err)
+		return err
+	}
+	defer file.Close()
+
+	if err := parser.Save(file, req); err != nil {
+		logrus.Error(err)
+		return err
+	}
+
+	return nil
+}
+
 func (cmd *InstallCmd) Run(ctx *Context) error {
 	m := manager.Manager{}
 
@@ -76,7 +93,7 @@ func (cmd *InstallCmd) Run(ctx *Context) error {
 	for _, pkg := range requirements.Packages {
 		for _, mpg := range pkg.Mappings {
 			packages = append(packages, &manager.Package{
-				URL: pkg.Src,
+				URL: overrideUrl(pkg.Src, ctx.UseGitConfig),
 				// Path:     cmd.Path,
 				Path:     mpg.Src,
 				Version:  mpg.Version,
@@ -96,27 +113,37 @@ func (cmd *InstallCmd) Run(ctx *Context) error {
 }
 
 func (cmd *AddCmd) Run(ctx *Context) error {
+
 	m := manager.Manager{}
 
-	// requirements, err := loadRequirements(cmd.File)
-	// if err != nil {
-	// 	logrus.Error(err)
-	// 	return err
-	// }
+	requirements, err := loadRequirements(cmd.File)
+	if err != nil {
+		logrus.Error(err)
+		return err
+	}
 
 	packages := make([]*manager.Package, 0)
+	url := overrideUrl(cmd.Url, ctx.UseGitConfig)
 	for k, v := range cmd.Mappings {
-		src, version := parseUrl(k)
+		src, version := parseUrl(strings.Trim(k, " "))
 		packages = append(packages, &manager.Package{
-			URL:      cmd.Url,
+			URL:      url,
 			Path:     cmd.Path,
 			Version:  version,
 			Mappings: []manager.Mapping{{Src: src, Dest: v}},
+		})
+		requirements.Add(parser.Package{
+			Src:      url,
+			Mappings: []parser.ReqiurementMapping{{SrcDest: parser.SrcDest{Src: src, Dest: v}, Version: version}},
 		})
 	}
 	if err := m.Install(packages, &manager.InstallOptions{WorkDir: ctx.WorkDir}); err != nil {
 		logrus.Error(err)
 		return err
+	}
+
+	if cmd.Save {
+		saveRequirements(cmd.File, requirements)
 	}
 
 	return nil
@@ -125,7 +152,8 @@ func (cmd *AddCmd) Run(ctx *Context) error {
 func (cmd *ListCmd) Run(ctx *Context) (err error) {
 	var versions []string
 	d := downloader.NewDownloader()
-	versions, err = d.FetchVersion(cmd.Url, nil)
+	url := overrideUrl(cmd.Url, ctx.UseGitConfig)
+	versions, err = d.FetchVersion(url, nil)
 	for _, v := range versions {
 		fmt.Println(v)
 	}
@@ -134,11 +162,11 @@ func (cmd *ListCmd) Run(ctx *Context) (err error) {
 }
 
 var CLI struct {
-	Debug   bool   `kong:"help='Enable debug mode.',name='debug'"`
-	WorkDir string `kong:"help='Working directory with .apm mount point. It is current directory by default',name='workdir',short='w',optional"`
+	Debug        bool   `kong:"help='Enable debug mode.',name='debug'"`
+	WorkDir      string `kong:"help='Working directory with .apm mount point. It is current directory by default',name='workdir',short='w',optional"`
+	UseGitConfig bool   `kong:"help='Use gitconfig to override url',name='use-gitconfig',default=true,optional"`
 	// User         string
 	// AuthType     string
-	// UseGitConfig bool
 	Install InstallCmd `kong:"cmd,help='Install a package'"`
 	List    ListCmd    `kong:"cmd,help='List remote versions'"`
 	Add     AddCmd     `kong:"cmd,help='Add a package'"`

@@ -81,7 +81,7 @@ func testGet(version string, want []testFileFingerprint) (err error) {
 	}
 	defer tearDown(tmpdir)
 
-	if _, err = d.Get(DefTestPublicURL, version, tmpdir, &Options{}); err != nil {
+	if err = d.Get(DefTestPublicURL, version, tmpdir, &Options{}); err != nil {
 		return
 	}
 

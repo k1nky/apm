@@ -28,12 +28,11 @@ type AuthType int
 
 type Options struct {
 	// TODO: Override existing directory
-	Override     bool
-	UseGitConfig bool
-	Auth         AuthType
-	Username     string
-	Password     string
-	OnlySwitch   bool
+	Override   bool
+	Auth       AuthType
+	Username   string
+	Password   string
+	OnlySwitch bool
 }
 
 type Downloader struct {
@@ -48,10 +47,9 @@ func NewDownloader() *Downloader {
 
 func DefaultOptions() *Options {
 	return &Options{
-		Override:     true,
-		UseGitConfig: true,
-		Auth:         NoAuth,
-		OnlySwitch:   false,
+		Override:   true,
+		Auth:       NoAuth,
+		OnlySwitch: false,
 	}
 }
 
@@ -143,7 +141,7 @@ func RewriteURLFromGitConfig(url string) string {
 	return url
 }
 
-func (d *Downloader) prepareUrl(url string) (newUrl string, err error) {
+func RewriteUrl(url string, useGitConfig bool) (newUrl string, err error) {
 	newUrl = url
 	if !strings.HasPrefix(url, "http") && !strings.HasPrefix(url, "ssh") {
 		newUrl = "https://" + url
@@ -152,14 +150,14 @@ func (d *Downloader) prepareUrl(url string) (newUrl string, err error) {
 		return
 	}
 
-	if d.options.UseGitConfig {
+	if useGitConfig {
 		newUrl = RewriteURLFromGitConfig(newUrl)
 	}
 
 	return
 }
 
-func (d *Downloader) prepare(url string, options *Options) (newUrl string, err error) {
+func (d *Downloader) prepare(url string, options *Options) (err error) {
 	if options == nil {
 		d.options = DefaultOptions()
 	} else {
@@ -169,9 +167,7 @@ func (d *Downloader) prepare(url string, options *Options) (newUrl string, err e
 		return
 	}
 
-	newUrl, err = d.prepareUrl(url)
-
-	if strings.HasPrefix(newUrl, "ssh") {
+	if strings.HasPrefix(url, "ssh") {
 		d.options.Auth = SSHAgentAuth
 	}
 	return
@@ -180,14 +176,14 @@ func (d *Downloader) prepare(url string, options *Options) (newUrl string, err e
 // Get a package from `url` with `version` to `dest` directory.
 // If scheme is not specified for url will be used 'https'.
 // Default version is 'master'.
-func (d *Downloader) Get(url string, version string, dest string, options *Options) (newUrl string, err error) {
+func (d *Downloader) Get(url string, version string, dest string, options *Options) (err error) {
 
-	if newUrl, err = d.prepare(url, options); err != nil {
+	if err = d.prepare(url, options); err != nil {
 		return
 	}
 
 	if !d.options.OnlySwitch {
-		if err = d.clone(dest, newUrl); err != nil {
+		if err = d.clone(dest, url); err != nil {
 			return
 		}
 	}
@@ -197,7 +193,7 @@ func (d *Downloader) Get(url string, version string, dest string, options *Optio
 }
 
 func (d *Downloader) FetchVersion(url string, options *Options) (versions []string, err error) {
-	if url, err = d.prepare(url, options); err != nil {
+	if err = d.prepare(url, options); err != nil {
 		return
 	}
 

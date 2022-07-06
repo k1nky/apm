@@ -106,8 +106,7 @@ func (m *Manager) download(p *Package, opts *downloader.Options) (err error) {
 		}
 	}
 
-	// TODO: newUrl?
-	_, err = d.Get(p.URL, p.Version, m.TmpDir, opts)
+	err = d.Get(p.URL, p.Version, m.TmpDir, opts)
 	return
 }
 
