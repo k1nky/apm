@@ -6,6 +6,7 @@ require (
 	github.com/alecthomas/kong v0.2.22
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/sirupsen/logrus v1.4.2
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
@@ -28,5 +29,4 @@ require (
 	golang.org/x/net v0.0.0-20210428140749-89ef3d95e781 // indirect
 	golang.org/x/sys v0.0.0-20210927094055-39ccf1dd6fa6 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
