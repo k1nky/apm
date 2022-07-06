@@ -15,11 +15,14 @@ func setUp() (tmpdir string, err error) {
 
 func testInstallPackage(p *Package) (err error) {
 	m := Manager{}
-	if m.WorkDir, err = setUp(); err != nil {
+	tmpDir := ""
+	if tmpDir, err = setUp(); err != nil {
 		return err
 	}
 	defer os.RemoveAll(m.WorkDir)
-	if err = m.Install(p, &InstallOptions{}); err != nil {
+	if err = m.Install([]*Package{p}, &InstallOptions{
+		WorkDir: tmpDir,
+	}); err != nil {
 		return
 	}
 	err = filepath.Walk(m.WorkDir, func(path string, info fs.FileInfo, err error) error {
@@ -38,7 +41,7 @@ func testInstallPackage(p *Package) (err error) {
 
 func TestInstallDefault(t *testing.T) {
 	p := &Package{
-		URL:      "https://bitbucket.org/bitjackass/apm-test-example",
+		URL:      "https://github.com/k1nky/ansible-simple-role.git",
 		Version:  "master",
 		Path:     ".",
 		Mappings: []Mapping{{"*", "."}},
@@ -50,10 +53,10 @@ func TestInstallDefault(t *testing.T) {
 
 func TestInstallSubdir(t *testing.T) {
 	p := &Package{
-		URL:      "https://bitbucket.org/bitjackass/apm-test-example",
+		URL:      "https://github.com/k1nky/ansible-simple-roles.git",
 		Version:  "master",
 		Path:     ".",
-		Mappings: []Mapping{{"sub_a", "project/a"}},
+		Mappings: []Mapping{{"motd", "roles/motd"}},
 	}
 	if err := testInstallPackage(p); err != nil {
 		t.Error(err)
@@ -62,10 +65,10 @@ func TestInstallSubdir(t *testing.T) {
 
 func TestInstallDir(t *testing.T) {
 	p := &Package{
-		URL:      "https://bitbucket.org/bitjackass/apm-test-example",
+		URL:      "https://github.com/k1nky/ansible-simple-roles.git",
 		Version:  "master",
 		Path:     ".",
-		Mappings: []Mapping{{".", "project"}},
+		Mappings: []Mapping{{".", "roles"}},
 	}
 	if err := testInstallPackage(p); err != nil {
 		t.Error(err)
@@ -74,10 +77,10 @@ func TestInstallDir(t *testing.T) {
 
 func TestInstallSubfiles(t *testing.T) {
 	p := &Package{
-		URL:      "https://bitbucket.org/bitjackass/apm-test-example",
+		URL:      "https://github.com/k1nky/ansible-simple-role.git",
 		Version:  "master",
 		Path:     ".",
-		Mappings: []Mapping{{"sub_a/sub_a1/*.json", "project"}},
+		Mappings: []Mapping{{"tasks/*.yml", "project"}},
 	}
 	if err := testInstallPackage(p); err != nil {
 		t.Error(err)
