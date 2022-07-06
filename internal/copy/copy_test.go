@@ -18,7 +18,7 @@ func setUp() (tmpdir string, err error) {
 		return
 	}
 	if _, err = git.PlainClone(tmpdir, false, &git.CloneOptions{
-		URL:          "https://bitbucket.org/bitjackass/apm-test-example",
+		URL:          "https://github.com/k1nky/ansible-simple-roles.git",
 		SingleBranch: true,
 	}); err != nil {
 		return
@@ -35,11 +35,9 @@ func TestValidate(t *testing.T) {
 }
 
 func TestCopyDir(t *testing.T) {
-	what := []string{"sub_b", "."}
+	what := []string{"motd"}
 	want := [][]string{
-		{"sub_b/sub_b.yml"},
-		{"sub_b/sub_b.yml", "sub_a/sub_a1/2.json",
-			"sub_a/sub_a1/1.json", "sub_a/sub_a.yml", "main.txt"},
+		{"motd/defaults/main.yml", "motd/templates/motd.j2", "motd/tasks/main.yml"},
 	}
 
 	for k, v := range what {
@@ -65,10 +63,9 @@ func TestCopyDir(t *testing.T) {
 }
 
 func TestCopyFile(t *testing.T) {
-	what := []string{"main.txt", "sub_a/sub_a.yml"}
+	what := []string{"etchosts/tasks/main.yml"}
 	want := [][]string{
-		{"main.txt"},
-		{"sub_a/sub_a.yml"},
+		{"etchosts/tasks/main.yml"},
 	}
 
 	for k, v := range what {
@@ -96,11 +93,10 @@ func TestCopyFile(t *testing.T) {
 }
 
 func TestResolveGlob(t *testing.T) {
-	what := []string{"*", "sub_b/sub_b.yml", "sub_a/sub_a1/*.json"}
+	what := []string{"*", "motd/tasks/*.yml"}
 	want := [][]string{
-		{"main.txt", "sub_a", "sub_b"},
-		{"sub_b/sub_b.yml"},
-		{"sub_a/sub_a1/1.json", "sub_a/sub_a1/2.json"},
+		{"motd", "ethosts"},
+		{"motd/tasks/main.yml"},
 	}
 	for k, v := range what {
 		fs, err := ResolveGlob(testSrcDir, v, nil)
