@@ -19,7 +19,9 @@ func main() {
 	// Call the Run() method of the selected parsed command.
 	err := ctx.Run(&Context{
 		Debug:   CLI.Debug,
-		WorkDir: CLI.WorkDir})
+		WorkDir: CLI.WorkDir,
+		File:    CLI.File,
+	})
 	ctx.FatalIfErrorf(err)
 
 }

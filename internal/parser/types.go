@@ -5,26 +5,26 @@ type SrcDest struct {
 	Dest string `yaml:"dest"`
 }
 
-type Boost struct {
+type ApkgBoost struct {
 	Copy []SrcDest `yaml:"copy"`
 }
 
 type Apkg struct {
 	Mappings []SrcDest `yaml:"mappings"`
-	Boost    Boost     `yaml:"boost"`
+	Boost    ApkgBoost `yaml:"boost"`
+	Base     string    `yaml:"base"`
 }
 
-type Mapping struct {
+type ReqiuredMapping struct {
 	SrcDest
 	Version string `yaml:"version"`
-	Boost   bool   `yaml:"boost"`
 }
 
-type Package struct {
-	Src      string    `yaml:"src"`
-	Mappings []Mapping `yaml:"mappings"`
+type RequiredPackage struct {
+	Url      string            `yaml:"src"`
+	Mappings []ReqiuredMapping `yaml:"mappings"`
 }
 
 type Requirements struct {
-	Packages []Package `yaml:"packages"`
+	Packages []RequiredPackage `yaml:"packages"`
 }
