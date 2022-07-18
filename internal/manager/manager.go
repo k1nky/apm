@@ -23,7 +23,8 @@ type Manager struct {
 type InstallOptions struct {
 	WorkDir         string
 	DownloadOptions *downloader.Options
-	OnceDowload     bool
+	OnceDownload    bool
+	Force           bool
 }
 type Mapping struct {
 	Src  string
@@ -48,6 +49,15 @@ func (opts *InstallOptions) Validate() error {
 		opts.DownloadOptions = downloader.DefaultOptions()
 	}
 	return nil
+}
+
+func DefaultInstallOptions() InstallOptions {
+	return InstallOptions{
+		DownloadOptions: downloader.DefaultOptions(),
+		WorkDir:         ".",
+		OnceDownload:    true,
+		Force:           false,
+	}
 }
 
 func (m *Manager) MakeStorage(dir string) (err error) {
@@ -111,12 +121,6 @@ func (m *Manager) download(p *Package, opts *downloader.Options) (err error) {
 }
 
 func (m *Manager) unpack(p *Package) (err error) {
-	if err = m.MakeStorage(""); err != nil {
-		return
-	}
-
-	hash := p.Hash()
-	p.storagePath = path.Join(m.Storage, hash)
 	if err = os.MkdirAll(p.storagePath, copy.Mode0755); err != nil {
 		return err
 	}
@@ -220,6 +224,10 @@ func (m *Manager) Install(pkgs []*Package, opts *InstallOptions) (err error) {
 
 	opts.Validate()
 
+	if err = m.MakeStorage(""); err != nil {
+		return
+	}
+
 	for _, p := range pkgs {
 		contextLogger := logrus.WithFields(logrus.Fields{
 			"url":     p.URL,
@@ -235,11 +243,17 @@ func (m *Manager) Install(pkgs []*Package, opts *InstallOptions) (err error) {
 			opts = &InstallOptions{}
 		}
 		m.WorkDir = opts.WorkDir
+		p.storagePath = path.Join(m.Storage, p.Hash())
 
-		if err = m.download(p, opts.DownloadOptions); err != nil {
-			return
+		if opts.Force || !m.isPackageExist(p) {
+			if err = m.download(p, opts.DownloadOptions); err != nil {
+				return
+			}
+			if err = m.unpack(p); err != nil {
+				return
+			}
 		}
-		opts.DownloadOptions.OnlySwitch = opts.OnceDowload
+		opts.DownloadOptions.OnlySwitch = opts.OnceDownload
 
 		if err = m.setup(p); err != nil {
 			return
@@ -251,11 +265,12 @@ func (m *Manager) Install(pkgs []*Package, opts *InstallOptions) (err error) {
 	return nil
 }
 
-func (m *Manager) setup(p *Package) (err error) {
+func (m *Manager) isPackageExist(p *Package) bool {
+	_, err := os.Stat(p.storagePath)
+	return os.IsExist(err)
+}
 
-	if err = m.unpack(p); err != nil {
-		return
-	}
+func (m *Manager) setup(p *Package) (err error) {
 
 	if err = m.setupWorkdir(p); err != nil {
 		return
