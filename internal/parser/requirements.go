@@ -2,38 +2,40 @@ package parser
 
 import (
 	"io"
-	"io/ioutil"
 
 	"gopkg.in/yaml.v2"
 )
 
+type ReqiuredMapping struct {
+	Src     string `yaml:"src"`
+	Dest    string `yaml:"dest"`
+	Version string `yaml:"version"`
+}
+
+type RequiredPackage struct {
+	Url      string            `yaml:"src"`
+	Mappings []ReqiuredMapping `yaml:"mappings"`
+}
+
+type Requirements struct {
+	Packages []RequiredPackage `yaml:"packages"`
+}
+
 func (r *Requirements) Read(reader io.Reader) (err error) {
-	var (
-		temp  *Requirements
-		bytes []byte
-	)
+	temp := &Requirements{}
 
-	if bytes, err = ioutil.ReadAll(reader); err != nil {
-		return err
-	}
+	err = yaml.NewDecoder(reader).Decode(temp)
 
-	if err = yaml.Unmarshal(bytes, &temp); err != nil {
-		return err
-	}
 	if temp != nil {
 		r.Packages = temp.Packages
 	}
 
-	// TODO: validateConfig(cfg)
+	// TODO: validate
 	return err
 }
 
 func (r *Requirements) Write(writer io.Writer) (err error) {
-	var bs []byte
-	if bs, err = yaml.Marshal(r); err != nil {
-		return err
-	}
-	_, err = writer.Write(bs)
+	err = yaml.NewEncoder(writer).Encode(r)
 	return
 }
 
