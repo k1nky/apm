@@ -30,7 +30,6 @@ jobs:
       with:
         files: apm
         tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
         draft: false
         prerelease: false
         fail_on_unmatched_files: true
