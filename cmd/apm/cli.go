@@ -96,12 +96,14 @@ func (cmd *LinkCmd) Run(ctx *Context) error {
 			Url: url,
 			Mappings: []parser.ReqiuredMapping{
 				{
-					SrcDest: parser.SrcDest{Src: src, Dest: v},
+					Src:     src,
+					Dest:    v,
 					Version: version,
 				},
 			},
 		})
 	}
+	// TODO: setup InstallOptions
 	if err := m.Install(packages, &manager.InstallOptions{WorkDir: ctx.WorkDir}); err != nil {
 		logrus.Error(err)
 		return err

@@ -51,8 +51,8 @@ func (opts *InstallOptions) Validate() error {
 	return nil
 }
 
-func DefaultInstallOptions() InstallOptions {
-	return InstallOptions{
+func DefaultInstallOptions() *InstallOptions {
+	return &InstallOptions{
 		DownloadOptions: downloader.DefaultOptions(),
 		WorkDir:         ".",
 		OnceDownload:    true,
@@ -218,11 +218,53 @@ func (m *Manager) setupMappings(p *Package) (err error) {
 	return
 }
 
+func (m *Manager) InstallFromApkg(p *Package, opts *InstallOptions) (err error) {
+
+	defer m.cleanup()
+
+	if opts == nil {
+		opts = DefaultInstallOptions()
+	} else {
+		opts.Validate()
+	}
+
+	if err = m.MakeStorage(""); err != nil {
+		return
+	}
+
+	m.WorkDir = opts.WorkDir
+	p.storagePath = path.Join(m.Storage, p.Hash())
+	if err = m.download(p, opts.DownloadOptions); err != nil {
+		return
+	}
+	if err = m.unpack(p); err != nil {
+		return
+	}
+	// read apkg
+	apkg, err := ReadApkg(path.Join(p.storagePath, p.Path))
+	if err != nil {
+		return
+	}
+	p.Mappings = apkg.Mappings
+
+	if err = m.setup(p); err != nil {
+		return
+	}
+
+	// run boost
+
+	return err
+}
+
 func (m *Manager) Install(pkgs []*Package, opts *InstallOptions) (err error) {
 
 	defer m.cleanup()
 
-	opts.Validate()
+	if opts == nil {
+		opts = DefaultInstallOptions()
+	} else {
+		opts.Validate()
+	}
 
 	if err = m.MakeStorage(""); err != nil {
 		return
@@ -238,9 +280,6 @@ func (m *Manager) Install(pkgs []*Package, opts *InstallOptions) (err error) {
 
 		if err := p.Validate(); err != nil {
 			return err
-		}
-		if opts == nil {
-			opts = &InstallOptions{}
 		}
 		m.WorkDir = opts.WorkDir
 		p.storagePath = path.Join(m.Storage, p.Hash())
