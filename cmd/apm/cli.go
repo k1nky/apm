@@ -17,26 +17,39 @@ type Context struct {
 	File         string
 }
 
+var CLI struct {
+	Debug        bool   `help:"Enable debug mode." name:"debug"`
+	WorkDir      string `help:"Working directory with .apm mount point. It is current directory by default" name:"workdir" short:"w" optional:""`
+	UseGitConfig bool   `help:"Use gitconfig to override url" name:"gitconfig" default:"true" optional:"" negatable:""`
+	File         string `help:"Path to a file with requirements" name:"file" short:"f" optional:"" default:"requirements.yml"`
+	// TODO: User         string
+	// TODO: AuthType     string
+	Add     AddCmd     `cmd:"" help:"Add a package"`
+	Install InstallCmd `cmd:"" help:"Install packages from file"`
+	List    ListCmd    `cmd:"" help:"List remote versions"`
+	Link    LinkCmd    `cmd:"" help:"Link resources"`
+}
+
 type InstallCmd struct {
 }
 
 type LinkCmd struct {
-	Url      string            `kong:"help='Package URL, will be skipped when installation from file is set.',name='url',short='u',arg,placeholder='url',optional"`
-	Path     string            `kong:"help='Path to .apkg in the remote repository',name='path',short='p',default='.',optional"`
-	Mappings map[string]string `kong:"help='Package mappings, will mount a source file or directory within a destination directory. Skiping if Path is set. Example, <remote_file_or_dir>@<version>=./roles',name='mappings',short='m',default='\"*@master=.\"',optional"`
-	Save     bool              `kong:"help='Save added package to requirements',name='save',short='s',optional,default=false"`
+	Url      string            `help:"Package URL, will be skipped when installation from file is set." name:"url" short:"u" arg:"" placeholder:"url" optional:""`
+	Path     string            `help:"Path to .apkg in the remote repository" name:"path" short:"p" default:"." optional:""`
+	Mappings map[string]string `help:"Package mappings, will mount a source file or directory within a destination directory. Skiping if Path is set. Example, <remote_file_or_dir>@<version>=./roles" name:"mappings" short:"m" default:"\"*@master=.\"" optional:""`
+	Save     bool              `help:"Save added package to requirements" name:"save" short:"s" optional:"" default:"false"`
 	// TODO: NoLink bool
 	// TODO: Boost     bool
 }
 
 type AddCmd struct {
-	Url   string   `kong:"help='Package URL, will be skipped when installation from file is set.',name='url',short='u',arg,placeholder='url',optional"`
-	Paths []string `kong:"help='Path to .apkg in the remote repository',name='path',short='p',default='.',optional"`
-	Save  bool     `kong:"help='Save added package to requirements',name='save',short='s',optional,default=false"`
+	Url   string   `help:"Package URL, will be skipped when installation from file is set." name:"url" short:"u" arg:"" placeholder:"url" optional:""`
+	Paths []string `help:"Path to .apkg in the remote repository" name:"path" short:"p" default:"." optional:""`
+	Save  bool     `help:"Save added package to requirements" name:"save" short:"s" optional:"" default:"false"`
 }
 
 type ListCmd struct {
-	Url string `kong:"help='Package URL',arg,placeholder='url',required"`
+	Url string `help:"Package URL" arg:"" placeholder:"url" required:""`
 }
 
 func (cmd *InstallCmd) Run(ctx *Context) error {
@@ -93,7 +106,8 @@ func (cmd *LinkCmd) Run(ctx *Context) error {
 			Mappings: []manager.Mapping{{Src: src, Dest: v}},
 		})
 		requirements.Add(parser.RequiredPackage{
-			Url: url,
+			// use original url to prevent unexpected overriding
+			Url: cmd.Url,
 			Mappings: []parser.ReqiuredMapping{
 				{
 					Src:     src,
@@ -116,6 +130,7 @@ func (cmd *LinkCmd) Run(ctx *Context) error {
 	return nil
 }
 
+// TODO: Run command
 func (cmd *AddCmd) Run(ctx *Context) error {
 
 	// m := manager.Manager{}
@@ -163,17 +178,4 @@ func (cmd *ListCmd) Run(ctx *Context) (err error) {
 	}
 
 	return
-}
-
-var CLI struct {
-	Debug        bool   `kong:"help='Enable debug mode.',name='debug'"`
-	WorkDir      string `kong:"help='Working directory with .apm mount point. It is current directory by default',name='workdir',short='w',optional"`
-	UseGitConfig bool   `kong:"help='Use gitconfig to override url',name='use-gitconfig',default=true,optional"`
-	File         string `kong:"help='Path to a file with requirements',name='file',short='f',optional,default='requirements.yml'"`
-	// TODO: User         string
-	// TODO: AuthType     string
-	Add     AddCmd     `king:"cmd,help='Add a package'"`
-	Install InstallCmd `kong:"cmd,help='Install packages from file'"`
-	List    ListCmd    `kong:"cmd,help='List remote versions'"`
-	Link    LinkCmd    `kong:"cmd,help='Link resources'"`
 }
