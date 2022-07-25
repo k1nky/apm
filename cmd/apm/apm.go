@@ -18,9 +18,10 @@ func main() {
 	ctx := kong.Parse(&CLI)
 	// Call the Run() method of the selected parsed command.
 	err := ctx.Run(&Context{
-		Debug:   CLI.Debug,
-		WorkDir: CLI.WorkDir,
-		File:    CLI.File,
+		Debug:        CLI.Debug,
+		WorkDir:      CLI.WorkDir,
+		File:         CLI.File,
+		UseGitConfig: CLI.UseGitConfig,
 	})
 	ctx.FatalIfErrorf(err)
 
