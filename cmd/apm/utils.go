@@ -2,6 +2,9 @@ package main
 
 import (
 	"os"
+	"os/user"
+	"path/filepath"
+	"strings"
 
 	"github.com/k1nky/apm/internal/downloader"
 	"github.com/k1nky/apm/internal/parser"
@@ -52,4 +55,12 @@ func saveRequirements(filename string, req *parser.Requirements) error {
 	}
 
 	return nil
+}
+
+func expandPath(p string) string {
+	if strings.HasPrefix(p, "~") {
+		usr, _ := user.Current()
+		return filepath.Join(usr.HomeDir, p[2:])
+	}
+	return p
 }

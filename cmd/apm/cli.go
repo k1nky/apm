@@ -66,7 +66,6 @@ func (cmd *InstallCmd) Run(ctx *Context) error {
 		return err
 	}
 
-	// install from legacy file
 	packages := make([]*manager.Package, 0)
 	for _, pkg := range requirements.Packages {
 		for _, mpg := range pkg.Mappings {
@@ -135,7 +134,6 @@ func (cmd *LinkCmd) Run(ctx *Context) error {
 	return nil
 }
 
-// TODO: Run command
 func (cmd *AddCmd) Run(ctx *Context) error {
 
 	m := manager.Manager{}
@@ -157,10 +155,16 @@ func (cmd *AddCmd) Run(ctx *Context) error {
 			logrus.Error(err)
 			return err
 		}
-		// requirements.Add(parser.RequiredPackage{
-		// 	Url:      url,
-		// 	Mappings: []parser.ReqiuredMapping{{SrcDest: parser.SrcDest{Src: src, Dest: v}, Version: cmd.Version}},
-		// })
+		for _, mpg := range pkg.Mappings {
+			requirements.Add(parser.RequiredPackage{
+				Url: cmd.Url,
+				Mappings: []parser.ReqiuredMapping{{
+					Src:     path,
+					Dest:    mpg.Dest,
+					Version: cmd.Version,
+				}},
+			})
+		}
 	}
 
 	if cmd.Save {

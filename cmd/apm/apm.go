@@ -22,10 +22,9 @@ func main() {
 	// Call the Run() method of the selected parsed command.
 	err := ctx.Run(&Context{
 		Debug:        CLI.Debug,
-		WorkDir:      CLI.WorkDir,
+		WorkDir:      expandPath(CLI.WorkDir),
 		File:         CLI.File,
 		UseGitConfig: CLI.UseGitConfig,
 	})
 	ctx.FatalIfErrorf(err)
-
 }
