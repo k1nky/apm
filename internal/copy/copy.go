@@ -14,6 +14,7 @@ import (
 const (
 	// Mode0755 is file mode 0755
 	Mode0755 = 0755
+	Mode0644 = 0644
 )
 
 type GlobOptions struct {
@@ -24,6 +25,8 @@ type GlobOptions struct {
 type CopyOptions struct {
 	// Override existed destination directory
 	Override bool
+	// MakeLostDirectory creates parent directory if it is not exist
+	MakeLostDirectory bool
 }
 
 func validateRoot(root string) (string, error) {
@@ -166,6 +169,12 @@ func Copy(src string, dest string, options *CopyOptions) (err error) {
 	if info.Mode().IsDir() {
 		err = CopyDir(src, dest)
 	} else {
+		if options.MakeLostDirectory {
+			err = os.MkdirAll(path.Dir(dest), Mode0755)
+			if err != nil {
+				return
+			}
+		}
 		_, err = CopyFile(src, dest)
 	}
 

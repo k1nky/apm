@@ -25,6 +25,7 @@ type InstallOptions struct {
 	DownloadOptions *downloader.Options
 	OnceDownload    bool
 	Force           bool
+	Boost           bool
 }
 type Mapping struct {
 	Src  string
@@ -251,9 +252,27 @@ func (m *Manager) InstallFromApkg(p *Package, opts *InstallOptions) (err error) 
 		return
 	}
 
-	// run boost
+	// apply boost
+	if opts.Boost {
+		err = m.applyBoost(p, apkg.Boost)
+	}
 
 	return err
+}
+
+func (m *Manager) applyBoost(p *Package, actions ApkgBoost) (err error) {
+	packagePath := path.Join(p.storagePath, p.Path)
+	for _, v := range actions.Copy {
+		src := path.Join(packagePath, v.Src)
+		dest := path.Join(m.WorkDir, v.Dest)
+		err = copy.Copy(src, dest, &copy.CopyOptions{
+			MakeLostDirectory: true,
+		})
+		if err != nil {
+			return
+		}
+	}
+	return
 }
 
 func (m *Manager) Install(pkgs []*Package, opts *InstallOptions) (err error) {

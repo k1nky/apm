@@ -152,6 +152,7 @@ func (cmd *AddCmd) Run(ctx *Context) error {
 	url := overrideUrl(cmd.Url, ctx.UseGitConfig)
 	opts := &manager.InstallOptions{
 		WorkDir: ctx.WorkDir,
+		Boost:   cmd.Boost,
 	}
 	for _, path := range cmd.Paths {
 		pkg := &manager.Package{
