@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"strings"
 
 	"github.com/k1nky/apm/internal/downloader"
 	"github.com/k1nky/apm/internal/parser"
@@ -17,21 +16,6 @@ func overrideUrl(url string, useGitConfig bool) string {
 	}
 	logrus.Debugf("override url %s to %s", url, newUrl)
 	return newUrl
-}
-
-func parseUrl(s string) (url string, version string) {
-	parts := strings.Split(s, "@")
-	if len(parts) == 0 {
-		return
-	}
-	url = parts[0]
-	if len(parts) > 1 {
-		version = parts[1]
-	}
-	if len(version) == 0 {
-		version = "master"
-	}
-	return
 }
 
 func loadRequirements(filename string) (req *parser.Requirements, err error) {

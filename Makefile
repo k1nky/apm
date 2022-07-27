@@ -1,4 +1,11 @@
 BINARY_NAME=apm
+VERSION=$(shell git describe --tags)
+GOOS=$(shell go env GOOS)
+GOARCH=$(shell go env GOARCH)
+
+GOLDFLAGS = -s
+GOLDFLAGS += -X main.BuildVersion=${VERSION}
+GOLDFLAGS += -X main.BuildTarget=${GOOS}/${GOARCH}
 
 all: lint test build
 
@@ -14,7 +21,7 @@ test:
 	go test -v ./cmd/**
 
 build:
-	go build -o ${BINARY_NAME} cmd/apm/*
+	go build -ldflags="${GOLDFLAGS}" -o ${BINARY_NAME} cmd/apm/*
 
 clean:
 	go clean

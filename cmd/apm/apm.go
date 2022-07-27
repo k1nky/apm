@@ -7,6 +7,9 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+var BuildVersion = "unknown"
+var BuildTarget = "unknown"
+
 func init() {
 	logrus.SetFormatter(&apmlog.Formatter{
 		LogFormat: "[%lvl%]: %time% - %msg% %fields%\n",

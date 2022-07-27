@@ -28,24 +28,29 @@ var CLI struct {
 	Install InstallCmd `cmd:"" help:"Install packages from file"`
 	List    ListCmd    `cmd:"" help:"List remote versions"`
 	Link    LinkCmd    `cmd:"" help:"Link resources"`
+	Version VersionCmd `cmd:"" help:"Show current version" short:"v"`
 }
 
 type InstallCmd struct {
 }
 
+type VersionCmd struct {
+}
+
 type LinkCmd struct {
 	Url      string            `help:"Package URL, will be skipped when installation from file is set." name:"url" short:"u" arg:"" placeholder:"url" optional:""`
-	Path     string            `help:"Path to .apkg in the remote repository" name:"path" short:"p" default:"." optional:""`
-	Mappings map[string]string `help:"Package mappings, will mount a source file or directory within a destination directory. Skiping if Path is set. Example, <remote_file_or_dir>@<version>=./roles" name:"mappings" short:"m" default:"\"*@master=.\"" optional:""`
+	Version  string            `help:"Version" name:"version" short:"v" default:"master" optional:""`
+	Mappings map[string]string `help:"Package mappings, will mount a source file or directory within a destination directory. Example, <remote_file_or_dir>=./roles" name:"map" short:"m" default:"*=.\"" optional:""`
 	Save     bool              `help:"Save added package to requirements" name:"save" short:"s" optional:"" default:"false"`
 	// TODO: NoLink bool
 	// TODO: Boost     bool
 }
 
 type AddCmd struct {
-	Url   string   `help:"Package URL, will be skipped when installation from file is set." name:"url" short:"u" arg:"" placeholder:"url" optional:""`
-	Paths []string `help:"Path to .apkg in the remote repository" name:"path" short:"p" default:"." optional:""`
-	Save  bool     `help:"Save added package to requirements" name:"save" short:"s" optional:"" default:"false"`
+	Url     string   `help:"Package URL, will be skipped when installation from file is set." name:"url" short:"u" arg:"" placeholder:"url" optional:""`
+	Version string   `help:"Version" name:"version" short:"v" default:"master" optional:""`
+	Paths   []string `help:"Path to .apkg in the remote repository" name:"path" short:"p" default:"." optional:""`
+	Save    bool     `help:"Save added package to requirements" name:"save" short:"s" optional:"" default:"false"`
 }
 
 type ListCmd struct {
@@ -98,11 +103,11 @@ func (cmd *LinkCmd) Run(ctx *Context) error {
 	packages := make([]*manager.Package, 0)
 	url := overrideUrl(cmd.Url, ctx.UseGitConfig)
 	for k, v := range cmd.Mappings {
-		src, version := parseUrl(strings.Trim(k, " "))
+		src := strings.Trim(k, " ")
 		packages = append(packages, &manager.Package{
 			URL:      url,
-			Path:     cmd.Path,
-			Version:  version,
+			Path:     ".",
+			Version:  cmd.Version,
 			Mappings: []manager.Mapping{{Src: src, Dest: v}},
 		})
 		requirements.Add(parser.RequiredPackage{
@@ -112,7 +117,7 @@ func (cmd *LinkCmd) Run(ctx *Context) error {
 				{
 					Src:     src,
 					Dest:    v,
-					Version: version,
+					Version: cmd.Version,
 				},
 			},
 		})
@@ -133,7 +138,7 @@ func (cmd *LinkCmd) Run(ctx *Context) error {
 // TODO: Run command
 func (cmd *AddCmd) Run(ctx *Context) error {
 
-	// m := manager.Manager{}
+	m := manager.Manager{}
 
 	requirements, err := loadRequirements(ctx.File)
 	if err != nil {
@@ -141,25 +146,22 @@ func (cmd *AddCmd) Run(ctx *Context) error {
 		return err
 	}
 
-	// packages := make([]*manager.Package, 0)
-	// url := overrideUrl(cmd.Url, ctx.UseGitConfig)
-	// for k, v := range cmd.Mappings {
-	// 	src, version := parseUrl(strings.Trim(k, " "))
-	// 	packages = append(packages, &manager.Package{
-	// 		URL:      url,
-	// 		Path:     cmd.Path,
-	// 		Version:  version,
-	// 		Mappings: []manager.Mapping{{Src: src, Dest: v}},
-	// 	})
-	// 	requirements.Add(parser.RequiredPackage{
-	// 		Url:      url,
-	// 		Mappings: []parser.ReqiuredMapping{{SrcDest: parser.SrcDest{Src: src, Dest: v}, Version: version}},
-	// 	})
-	// }
-	// if err := m.Install(packages, &manager.InstallOptions{WorkDir: ctx.WorkDir}); err != nil {
-	// 	logrus.Error(err)
-	// 	return err
-	// }
+	url := overrideUrl(cmd.Url, ctx.UseGitConfig)
+	for _, path := range cmd.Paths {
+		pkg := &manager.Package{
+			URL:     url,
+			Path:    path,
+			Version: cmd.Version,
+		}
+		if err := m.InstallFromApkg(pkg, &manager.InstallOptions{WorkDir: ctx.WorkDir}); err != nil {
+			logrus.Error(err)
+			return err
+		}
+		// requirements.Add(parser.RequiredPackage{
+		// 	Url:      url,
+		// 	Mappings: []parser.ReqiuredMapping{{SrcDest: parser.SrcDest{Src: src, Dest: v}, Version: cmd.Version}},
+		// })
+	}
 
 	if cmd.Save {
 		saveRequirements(ctx.File, requirements)
@@ -177,5 +179,10 @@ func (cmd *ListCmd) Run(ctx *Context) (err error) {
 		fmt.Println(v)
 	}
 
+	return
+}
+
+func (cmd *VersionCmd) Run(ctx *Context) (err error) {
+	fmt.Printf("%s %s\n", BuildTarget, BuildVersion)
 	return
 }
