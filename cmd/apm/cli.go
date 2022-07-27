@@ -28,7 +28,7 @@ var CLI struct {
 	Install InstallCmd `cmd:"" help:"Install packages from file"`
 	List    ListCmd    `cmd:"" help:"List remote versions"`
 	Link    LinkCmd    `cmd:"" help:"Link resources"`
-	Version VersionCmd `cmd:"" help:"Show current version" short:"v"`
+	Version VersionCmd `cmd:"" help:"Show current version" aliases:"v"`
 }
 
 type InstallCmd struct {
@@ -43,7 +43,7 @@ type LinkCmd struct {
 	Mappings map[string]string `help:"Package mappings, will mount a source file or directory within a destination directory. Example, <remote_file_or_dir>=./roles" name:"map" short:"m" default:"*=.\"" optional:""`
 	Save     bool              `help:"Save added package to requirements" name:"save" short:"s" optional:"" default:"false"`
 	// TODO: NoLink bool
-	// TODO: Boost     bool
+	// TODO: Force bool
 }
 
 type AddCmd struct {
@@ -51,6 +51,9 @@ type AddCmd struct {
 	Version string   `help:"Version" name:"version" short:"v" default:"master" optional:""`
 	Paths   []string `help:"Path to .apkg in the remote repository" name:"path" short:"p" default:"." optional:""`
 	Save    bool     `help:"Save added package to requirements" name:"save" short:"s" optional:"" default:"false"`
+	Boost   bool     `help:"Apply boost actions" name:"boost" short:"b" optional:"" default:"true" negatable:""`
+	// TODO: NoLink bool
+	// TODO: Force bool
 }
 
 type ListCmd struct {
@@ -67,20 +70,20 @@ func (cmd *InstallCmd) Run(ctx *Context) error {
 	}
 
 	packages := make([]*manager.Package, 0)
+	opts := &manager.InstallOptions{
+		WorkDir:      ctx.WorkDir,
+		OnceDownload: true,
+	}
 	for _, pkg := range requirements.Packages {
 		for _, mpg := range pkg.Mappings {
 			packages = append(packages, &manager.Package{
-				URL: overrideUrl(pkg.Url, ctx.UseGitConfig),
-				// Path:     cmd.Path,
+				URL:      overrideUrl(pkg.Url, ctx.UseGitConfig),
 				Path:     mpg.Src,
 				Version:  mpg.Version,
 				Mappings: []manager.Mapping{{Src: "", Dest: mpg.Dest}},
 			})
 		}
-		if err := m.Install(packages, &manager.InstallOptions{
-			WorkDir:      ctx.WorkDir,
-			OnceDownload: true,
-		}); err != nil {
+		if err := m.Install(packages, opts); err != nil {
 			logrus.Error(err)
 			return err
 		}
@@ -101,6 +104,9 @@ func (cmd *LinkCmd) Run(ctx *Context) error {
 
 	packages := make([]*manager.Package, 0)
 	url := overrideUrl(cmd.Url, ctx.UseGitConfig)
+	opts := &manager.InstallOptions{
+		WorkDir: ctx.WorkDir,
+	}
 	for k, v := range cmd.Mappings {
 		src := strings.Trim(k, " ")
 		packages = append(packages, &manager.Package{
@@ -121,8 +127,7 @@ func (cmd *LinkCmd) Run(ctx *Context) error {
 			},
 		})
 	}
-	// TODO: setup InstallOptions
-	if err := m.Install(packages, &manager.InstallOptions{WorkDir: ctx.WorkDir}); err != nil {
+	if err := m.Install(packages, opts); err != nil {
 		logrus.Error(err)
 		return err
 	}
@@ -145,13 +150,16 @@ func (cmd *AddCmd) Run(ctx *Context) error {
 	}
 
 	url := overrideUrl(cmd.Url, ctx.UseGitConfig)
+	opts := &manager.InstallOptions{
+		WorkDir: ctx.WorkDir,
+	}
 	for _, path := range cmd.Paths {
 		pkg := &manager.Package{
 			URL:     url,
 			Path:    path,
 			Version: cmd.Version,
 		}
-		if err := m.InstallFromApkg(pkg, &manager.InstallOptions{WorkDir: ctx.WorkDir}); err != nil {
+		if err := m.InstallFromApkg(pkg, opts); err != nil {
 			logrus.Error(err)
 			return err
 		}
