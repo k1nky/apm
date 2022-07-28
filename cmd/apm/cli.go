@@ -77,7 +77,7 @@ func (cmd *InstallCmd) Run(ctx *Context) error {
 	for _, pkg := range requirements.Packages {
 		for _, mpg := range pkg.Mappings {
 			packages = append(packages, &manager.Package{
-				URL:      overrideUrl(pkg.Url, ctx.UseGitConfig),
+				URL:      overrideURL(pkg.Url, ctx.UseGitConfig),
 				Path:     mpg.Src,
 				Version:  mpg.Version,
 				Mappings: []manager.Mapping{{Src: "", Dest: mpg.Dest}},
@@ -103,7 +103,8 @@ func (cmd *LinkCmd) Run(ctx *Context) error {
 	}
 
 	packages := make([]*manager.Package, 0)
-	url := overrideUrl(cmd.Url, ctx.UseGitConfig)
+	url := overrideURL(cmd.Url, ctx.UseGitConfig)
+	// TODO: Set Download options
 	opts := &manager.InstallOptions{
 		WorkDir: ctx.WorkDir,
 	}
@@ -149,7 +150,8 @@ func (cmd *AddCmd) Run(ctx *Context) error {
 		return err
 	}
 
-	url := overrideUrl(cmd.Url, ctx.UseGitConfig)
+	url := overrideURL(cmd.Url, ctx.UseGitConfig)
+	// TODO: Set Downloader Options
 	opts := &manager.InstallOptions{
 		WorkDir: ctx.WorkDir,
 		Boost:   cmd.Boost,
@@ -185,9 +187,10 @@ func (cmd *AddCmd) Run(ctx *Context) error {
 
 func (cmd *ListCmd) Run(ctx *Context) (err error) {
 	var versions []string
-	d := downloader.NewDownloader()
-	url := overrideUrl(cmd.Url, ctx.UseGitConfig)
-	versions, err = d.FetchVersion(url, nil)
+	// TODO: DownloaderOptions from context
+	d := downloader.NewDownloader(nil)
+	url := overrideURL(cmd.Url, ctx.UseGitConfig)
+	versions, err = d.FetchVersion(url)
 	for _, v := range versions {
 		fmt.Println(v)
 	}

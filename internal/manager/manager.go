@@ -110,14 +110,14 @@ func (m *Manager) cleanup() {
 
 func (m *Manager) download(p *Package, opts *downloader.Options) (err error) {
 
-	d := downloader.NewDownloader()
+	d := downloader.NewDownloader(opts)
 	if m.TmpDir == "" {
 		if m.TmpDir, err = ioutil.TempDir("", DefaultTmpPrefix); err != nil {
 			return
 		}
 	}
 
-	err = d.Get(p.URL, p.Version, m.TmpDir, opts)
+	err = d.Get(p.URL, p.Version, m.TmpDir)
 	return
 }
 

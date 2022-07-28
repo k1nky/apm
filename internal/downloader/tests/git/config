@@ -1,0 +1,2 @@
+[url "ssh://git@repo.example.org"]
+        insteadOf = https://repo.example.org

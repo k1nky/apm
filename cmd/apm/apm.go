@@ -19,6 +19,9 @@ func init() {
 
 func main() {
 	ctx := kong.Parse(&CLI)
+	if CLI.Debug {
+		logrus.SetLevel(logrus.DebugLevel)
+	}
 	// Call the Run() method of the selected parsed command.
 	err := ctx.Run(&Context{
 		Debug:        CLI.Debug,

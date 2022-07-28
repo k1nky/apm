@@ -36,13 +36,16 @@ type Options struct {
 }
 
 type Downloader struct {
-	options *Options
+	Options *Options
 }
 
-func NewDownloader() *Downloader {
-	return &Downloader{
-		options: DefaultOptions(),
+func NewDownloader(opts *Options) *Downloader {
+	d := &Downloader{}
+	d.Options = opts
+	if d.Options == nil {
+		d.Options = DefaultOptions()
 	}
+	return d
 }
 
 func DefaultOptions() *Options {
@@ -58,14 +61,14 @@ func (options *Options) Validate() (err error) {
 }
 
 func (d *Downloader) auth() (method transport.AuthMethod, err error) {
-	switch d.options.Auth {
+	switch d.Options.Auth {
 	case NoAuth:
 	case SSHAgentAuth:
 		method, err = ssh.NewSSHAgentAuth("")
 	case BasicAuth:
 		method = &http.BasicAuth{
-			Username: d.options.Username,
-			Password: d.options.Password,
+			Username: d.Options.Username,
+			Password: d.Options.Password,
 		}
 	default:
 		err = errors.New("unsupported auth method")
@@ -94,7 +97,7 @@ func (d *Downloader) clone(dir string, url string) (err error) {
 	return
 }
 
-func (d *Downloader) retrieveRemoteVersion(url string, options *Options) (versions []string, err error) {
+func (d *Downloader) retrieveRemoteVersion(url string) (versions []string, err error) {
 	listOptions := &git.ListOptions{
 		InsecureSkipTLS: true,
 	}
@@ -146,7 +149,7 @@ func RewriteUrl(url string, useGitConfig bool) (newUrl string, err error) {
 	if !strings.HasPrefix(url, "http") && !strings.HasPrefix(url, "ssh") {
 		newUrl = "https://" + url
 	}
-	if _, err = gourl.Parse(newUrl); err != nil {
+	if _, err = gourl.ParseRequestURI(newUrl); err != nil {
 		return
 	}
 
@@ -157,18 +160,16 @@ func RewriteUrl(url string, useGitConfig bool) (newUrl string, err error) {
 	return
 }
 
-func (d *Downloader) prepare(url string, options *Options) (err error) {
-	if options == nil {
-		d.options = DefaultOptions()
-	} else {
-		d.options = options
+func (d *Downloader) prepare(url string) (err error) {
+	if d.Options == nil {
+		d.Options = DefaultOptions()
 	}
-	if err = d.options.Validate(); err != nil {
+	if err = d.Options.Validate(); err != nil {
 		return
 	}
 
 	if strings.HasPrefix(url, "ssh") {
-		d.options.Auth = SSHAgentAuth
+		d.Options.Auth = SSHAgentAuth
 	}
 	return
 }
@@ -176,13 +177,13 @@ func (d *Downloader) prepare(url string, options *Options) (err error) {
 // Get a package from `url` with `version` to `dest` directory.
 // If scheme is not specified for url will be used 'https'.
 // Default version is 'master'.
-func (d *Downloader) Get(url string, version string, dest string, options *Options) (err error) {
+func (d *Downloader) Get(url string, version string, dest string) (err error) {
 
-	if err = d.prepare(url, options); err != nil {
+	if err = d.prepare(url); err != nil {
 		return
 	}
 
-	if !d.options.OnlySwitch {
+	if !d.Options.OnlySwitch {
 		if err = d.clone(dest, url); err != nil {
 			return
 		}
@@ -192,12 +193,12 @@ func (d *Downloader) Get(url string, version string, dest string, options *Optio
 	return
 }
 
-func (d *Downloader) FetchVersion(url string, options *Options) (versions []string, err error) {
-	if err = d.prepare(url, options); err != nil {
+func (d *Downloader) FetchVersion(url string) (versions []string, err error) {
+	if err = d.prepare(url); err != nil {
 		return
 	}
 
-	versions, err = d.retrieveRemoteVersion(url, options)
+	versions, err = d.retrieveRemoteVersion(url)
 	sort.Strings(versions)
 	return
 }

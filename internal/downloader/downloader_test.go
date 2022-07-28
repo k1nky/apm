@@ -71,7 +71,7 @@ func prepareCloneTest() (tmpdir string, d *Downloader) {
 		log.Panic(err)
 		return "", nil
 	}
-	return tmpdir, NewDownloader()
+	return tmpdir, NewDownloader(nil)
 }
 
 func testGet(version string, want []testFileFingerprint) (err error) {
@@ -81,7 +81,7 @@ func testGet(version string, want []testFileFingerprint) (err error) {
 	}
 	defer tearDown(tmpdir)
 
-	if err = d.Get(DefTestPublicURL, version, tmpdir, &Options{}); err != nil {
+	if err = d.Get(DefTestPublicURL, version, tmpdir); err != nil {
 		return
 	}
 
@@ -117,6 +117,39 @@ func TestGetByHash(t *testing.T) {
 func TestGetByBranch(t *testing.T) {
 	if err := testGet("dev", cloneCase["dev"]); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestRewriteURL(t *testing.T) {
+	what := []string{"repo.example.org", "http://repo.example.com", "ssh://192.168.1.1"}
+	want := []string{"https://repo.example.org", "http://repo.example.com", "ssh://192.168.1.1"}
+	for k, v := range what {
+		if url, err := RewriteUrl(v, false); url != want[k] || err != nil {
+			t.Errorf("unexpected rewrite url from %s to %s", v, want[k])
+		}
+	}
+}
+
+func TestRewriteURLWithGitconfig(t *testing.T) {
+	root, _ := os.Getwd()
+	os.Setenv("XDG_CONFIG_HOME", path.Join(root, "./tests"))
+	what := []string{"repo.example.org"}
+	want := []string{"ssh://git@repo.example.org"}
+	for k, v := range what {
+		if url, err := RewriteUrl(v, true); url != want[k] || err != nil {
+			t.Errorf("unexpected rewrite url from %s to %s", v, want[k])
+		}
+	}
+}
+
+func TestFetchVersion(t *testing.T) {
+	d := NewDownloader(nil)
+	versions, err := d.FetchVersion("https://github.com/k1nky/ansible-simple-role.git")
+	if err != nil {
+		t.Error("unexpected error ", err)
+	}
+	if len(versions) == 0 {
+		t.Error("there is no version")
 	}
 }
 

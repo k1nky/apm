@@ -11,7 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func overrideUrl(url string, useGitConfig bool) string {
+func overrideURL(url string, useGitConfig bool) string {
 	newUrl, err := downloader.RewriteUrl(url, useGitConfig)
 	if err != nil {
 		logrus.Fatal(err)
