@@ -79,7 +79,7 @@ func (m *Manager) MakeStorage(dir string) (err error) {
 }
 
 func (p Package) Hash() string {
-	return fmt.Sprintf("%x@%s", md5.Sum([]byte(p.URL+p.Path)), p.Version)
+	return fmt.Sprintf("%x", md5.Sum([]byte(p.URL+p.Path+p.Version)))
 }
 
 func (p *Package) Validate() error {
