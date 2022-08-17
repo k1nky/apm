@@ -1,3 +1,4 @@
+// Package downloader present the tool to download a project from a remote git repository with specified version
 package downloader
 
 import (
@@ -18,36 +19,54 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// TODO: debug messages
+
+// Available authentication types
 const (
+	// NoAuth defines that a remote repositoty does not require authentication
 	NoAuth = iota
+	// SSHAgentAuth defines that a remote repository supports authentication with SSH.
+	// SSH agent will be used in this case
 	SSHAgentAuth
+	// BasicAuth defines that a remote repository supports HTTP basic authentication
 	BasicAuth
 )
 
+// AuthType defines the authentication type of a repository to use, such as SSH, HTTP Basic or none
 type AuthType int
 
+// Options contains the downloader options
 type Options struct {
 	// TODO: Override existing directory
-	Override   bool
-	Auth       AuthType
-	Username   string
-	Password   string
+	Override bool
+	// Auth is authentication type of a repository
+	Auth AuthType
+	// Username might required only with HTTP authentication type
+	Username string
+	// Password is password in plain text. It might required only with HTTP authentication type
+	Password string
+	// OnlySwitch if true target remote repository will not be cloned. Instead the destination directory will be switched
+	// to specified version. Assumed that the repository has already cloned to the destination.
 	OnlySwitch bool
 }
 
+// Downloader contains the downloader
 type Downloader struct {
 	Options *Options
 }
 
-func NewDownloader(opts *Options) *Downloader {
-	d := &Downloader{}
-	d.Options = opts
+// NewDownloader returns a new instance of downloader. If options is nil, default options will be used (see DefaultOptions)
+func NewDownloader(options *Options) *Downloader {
+	d := &Downloader{
+		Options: options,
+	}
 	if d.Options == nil {
 		d.Options = DefaultOptions()
 	}
 	return d
 }
 
+// DefaultOptions returns options with default values
 func DefaultOptions() *Options {
 	return &Options{
 		Override:   true,
@@ -56,6 +75,7 @@ func DefaultOptions() *Options {
 	}
 }
 
+// Validate validates options of the downloader
 func (options *Options) Validate() (err error) {
 	return nil
 }
@@ -125,6 +145,9 @@ func (d *Downloader) retrieveRemoteVersion(url string) (versions []string, err e
 	return
 }
 
+// RewriteURLFromGitConfig reads git config in global scope and rewrites `url`
+// to new URL from a section "insteadOf"
+// https://git-scm.com/docs/git-config#Documentation/git-config.txt-urlltbasegtinsteadOf
 func RewriteURLFromGitConfig(url string) string {
 	if cfg, err := config.LoadConfig(config.GlobalScope); err != nil {
 		logrus.Debug(err)
@@ -144,7 +167,9 @@ func RewriteURLFromGitConfig(url string) string {
 	return url
 }
 
-func RewriteUrl(url string, useGitConfig bool) (newUrl string, err error) {
+// RewriteURL rewrites `url` with git config if `useGitConfig` is true.
+// If `url` has not scheme prefix, "https:\\" will be use by default.
+func RewriteURL(url string, useGitConfig bool) (newUrl string, err error) {
 	newUrl = url
 	if !strings.HasPrefix(url, "http") && !strings.HasPrefix(url, "ssh") {
 		newUrl = "https://" + url

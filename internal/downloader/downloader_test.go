@@ -124,7 +124,7 @@ func TestRewriteURL(t *testing.T) {
 	what := []string{"repo.example.org", "http://repo.example.com", "ssh://192.168.1.1"}
 	want := []string{"https://repo.example.org", "http://repo.example.com", "ssh://192.168.1.1"}
 	for k, v := range what {
-		if url, err := RewriteUrl(v, false); url != want[k] || err != nil {
+		if url, err := RewriteURL(v, false); url != want[k] || err != nil {
 			t.Errorf("unexpected rewrite url from %s to %s", v, want[k])
 		}
 	}
@@ -136,7 +136,7 @@ func TestRewriteURLWithGitconfig(t *testing.T) {
 	what := []string{"repo.example.org"}
 	want := []string{"ssh://git@repo.example.org"}
 	for k, v := range what {
-		if url, err := RewriteUrl(v, true); url != want[k] || err != nil {
+		if url, err := RewriteURL(v, true); url != want[k] || err != nil {
 			t.Errorf("unexpected rewrite url from %s to %s", v, want[k])
 		}
 	}
