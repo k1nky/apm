@@ -12,7 +12,7 @@ import (
 )
 
 func overrideURL(url string, useGitConfig bool) string {
-	newUrl, err := downloader.RewriteUrl(url, useGitConfig)
+	newUrl, err := downloader.RewriteURL(url, useGitConfig)
 	if err != nil {
 		logrus.Fatal(err)
 		return ""
