@@ -25,8 +25,7 @@ type GlobOptions struct {
 type CopyOptions struct {
 	// Override existed destination directory
 	Override bool
-	// MakeLostDirectory creates parent directory if it is not exist
-	MakeLostDirectory bool
+	Plain    bool
 }
 
 func validateRoot(root string) (string, error) {
@@ -85,7 +84,7 @@ func (options *GlobOptions) Validate() error {
 	return nil
 }
 
-// CopyFile makes copy of `src` to `dest` and returns a number of copied bytes.
+// CopyFile makes copy of `src` file to `dest` file and returns a number of copied bytes.
 // `src` must be a regular file. Parent directory of `dest` must be existed.
 func CopyFile(src string, dest string) (int64, error) {
 	info, err := os.Stat(src)
@@ -115,7 +114,8 @@ func CopyFile(src string, dest string) (int64, error) {
 
 // CopyDir makes recursive copy of a directory into another directory.
 // If the destination directory does not exist it will be created.
-func CopyDir(src string, dest string) (err error) {
+// If set `plain` to true content of `src` directory will be placed into `dest` directory.
+func CopyDir(src string, dest string, plain bool) (err error) {
 	var fds []os.FileInfo
 	var srcInfo os.FileInfo
 
@@ -123,6 +123,9 @@ func CopyDir(src string, dest string) (err error) {
 		return err
 	}
 
+	if !plain {
+		dest = path.Join(dest, path.Base(src))
+	}
 	if err = os.MkdirAll(dest, srcInfo.Mode()); err != nil {
 		return err
 	}
@@ -135,7 +138,7 @@ func CopyDir(src string, dest string) (err error) {
 		dstfp := path.Join(dest, fd.Name())
 
 		if fd.IsDir() {
-			if err = CopyDir(srcfp, dstfp); err != nil {
+			if err = CopyDir(srcfp, dstfp, true); err != nil {
 				fmt.Println(err)
 			}
 		} else {
@@ -148,6 +151,10 @@ func CopyDir(src string, dest string) (err error) {
 }
 
 // Copy makes copy of a file or directory (`src`) within a directory (`dest`).
+// Exmaples:
+// Copy dir_a to dir_b and option Plain set to false => dir_a/dir_b
+// Copy dir_a to dir_b and option Plain set to true => dir_b/<content of dir_a>
+// Copy file_a to dir_b/file_b => dir_b/file_b
 func Copy(src string, dest string, options *CopyOptions) (err error) {
 	var info fs.FileInfo
 
@@ -157,23 +164,30 @@ func Copy(src string, dest string, options *CopyOptions) (err error) {
 	if err = options.Validate(); err != nil {
 		return
 	}
-	if _, err = os.Stat(dest); err == nil && options.Override {
-		if err = os.RemoveAll(dest); err != nil {
-			return err
-		}
-	}
 
 	if info, err = os.Stat(src); err != nil {
 		return
 	}
 	if info.Mode().IsDir() {
-		err = CopyDir(src, dest)
-	} else {
-		if options.MakeLostDirectory {
-			err = os.MkdirAll(path.Dir(dest), Mode0755)
-			if err != nil {
+		// Copy a directory
+		if options.Override {
+			if err = os.RemoveAll(dest); err != nil {
 				return
 			}
+		}
+		if err = os.MkdirAll(path.Dir(dest), Mode0755); err != nil {
+			return
+		}
+		err = CopyDir(src, dest, options.Plain)
+	} else {
+		// Copy a file
+		if options.Override {
+			if err = os.RemoveAll(path.Dir(dest)); err != nil {
+				return
+			}
+		}
+		if err = os.MkdirAll(path.Dir(dest), Mode0755); err != nil {
+			return
 		}
 		_, err = CopyFile(src, dest)
 	}

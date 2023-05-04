@@ -2,12 +2,11 @@ package main
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/k1nky/apm/internal/downloader"
 	"github.com/k1nky/apm/internal/manager"
 	"github.com/k1nky/apm/internal/parser"
-	"github.com/sirupsen/logrus"
+	"github.com/pterm/pterm"
 )
 
 type Context struct {
@@ -24,7 +23,6 @@ var CLI struct {
 	File         string `help:"Path to a file with requirements" name:"file" short:"f" optional:"" default:"requirements.yml"`
 	// TODO: User         string
 	// TODO: AuthType     string
-	Add     AddCmd     `cmd:"" help:"Add a package"`
 	Install InstallCmd `cmd:"" help:"Install packages from file"`
 	List    ListCmd    `cmd:"" help:"List remote versions"`
 	Link    LinkCmd    `cmd:"" help:"Link resources"`
@@ -38,20 +36,9 @@ type VersionCmd struct {
 }
 
 type LinkCmd struct {
-	Url      string            `help:"Package URL, will be skipped when installation from file is set." name:"url" short:"u" arg:"" placeholder:"url" optional:""`
-	Version  string            `help:"Version" name:"version" short:"v" default:"master" optional:""`
-	Mappings map[string]string `help:"Package mappings, will mount a source file or directory within a destination directory. Example, <remote_file_or_dir>=./roles" name:"map" short:"m" default:"*=.\"" optional:""`
-	Save     bool              `help:"Save added package to requirements" name:"save" short:"s" optional:"" default:"false"`
-	// TODO: NoLink bool
-	// TODO: Force bool
-}
-
-type AddCmd struct {
-	Url     string   `help:"Package URL, will be skipped when installation from file is set." name:"url" short:"u" arg:"" placeholder:"url" optional:""`
-	Version string   `help:"Version" name:"version" short:"v" default:"master" optional:""`
-	Paths   []string `help:"Path to .apkg in the remote repository" name:"path" short:"p" default:"." optional:""`
-	Save    bool     `help:"Save added package to requirements" name:"save" short:"s" optional:"" default:"false"`
-	Boost   bool     `help:"Apply boost actions" name:"boost" short:"b" optional:"" default:"true" negatable:""`
+	Url  string `help:"Package URL, will be skipped when installation from file is set." name:"url" short:"u" arg:"" placeholder:"url" optional:""`
+	Dest string `help:"Destitaion." name:"dest" short:"d" arg:"" placeholder:"dest" optional:""`
+	Save bool   `help:"Save added package to requirements" name:"save" short:"s" optional:"" default:"false"`
 	// TODO: NoLink bool
 	// TODO: Force bool
 }
@@ -65,26 +52,25 @@ func (cmd *InstallCmd) Run(ctx *Context) error {
 
 	requirements, err := loadRequirements(ctx.File)
 	if err != nil {
-		logrus.Error(err)
+		pterm.Error.Println(err)
 		return err
 	}
 
 	packages := make([]*manager.Package, 0)
 	opts := &manager.InstallOptions{
-		WorkDir:      ctx.WorkDir,
-		OnceDownload: true,
+		WorkDir: ctx.WorkDir,
 	}
 	for _, pkg := range requirements.Packages {
 		for _, mpg := range pkg.Mappings {
 			packages = append(packages, &manager.Package{
-				URL:      overrideUrl(pkg.Url, ctx.UseGitConfig),
-				Path:     mpg.Src,
-				Version:  mpg.Version,
-				Mappings: []manager.Mapping{{Src: "", Dest: mpg.Dest}},
+				URL:     overrideUrl(pkg.Url, ctx.UseGitConfig),
+				Src:     mpg.Src,
+				Version: mpg.Version,
+				Dest:    mpg.Dest,
 			})
 		}
 		if err := m.Install(packages, opts); err != nil {
-			logrus.Error(err)
+			pterm.Error.Println(err)
 			return err
 		}
 		packages = packages[:0]
@@ -98,82 +84,32 @@ func (cmd *LinkCmd) Run(ctx *Context) error {
 
 	requirements, err := loadRequirements(ctx.File)
 	if err != nil {
-		logrus.Error(err)
+		pterm.Error.Println(err)
 		return err
 	}
 
 	packages := make([]*manager.Package, 0)
-	url := overrideUrl(cmd.Url, ctx.UseGitConfig)
+	// url := overrideUrl(cmd.Url, ctx.UseGitConfig)
 	opts := &manager.InstallOptions{
 		WorkDir: ctx.WorkDir,
 	}
-	for k, v := range cmd.Mappings {
-		src := strings.Trim(k, " ")
-		packages = append(packages, &manager.Package{
-			URL:      url,
-			Path:     ".",
-			Version:  cmd.Version,
-			Mappings: []manager.Mapping{{Src: src, Dest: v}},
-		})
-		requirements.Add(parser.RequiredPackage{
-			// use original url to prevent unexpected overriding
-			Url: cmd.Url,
-			Mappings: []parser.ReqiuredMapping{
-				{
-					Src:     src,
-					Dest:    v,
-					Version: cmd.Version,
-				},
+	pkg := manager.PackageFromString(cmd.Url)
+	pkg.Dest = cmd.Dest
+	packages = append(packages, pkg)
+	requirements.Add(parser.RequiredPackage{
+		// use original url to prevent unexpected overriding
+		Url: pkg.URL,
+		Mappings: []parser.ReqiuredMapping{
+			{
+				Src:     pkg.Src,
+				Dest:    pkg.Dest,
+				Version: pkg.Version,
 			},
-		})
-	}
+		},
+	})
 	if err := m.Install(packages, opts); err != nil {
-		logrus.Error(err)
+		pterm.Error.Println(err)
 		return err
-	}
-
-	if cmd.Save {
-		saveRequirements(ctx.File, requirements)
-	}
-
-	return nil
-}
-
-func (cmd *AddCmd) Run(ctx *Context) error {
-
-	m := manager.Manager{}
-
-	requirements, err := loadRequirements(ctx.File)
-	if err != nil {
-		logrus.Error(err)
-		return err
-	}
-
-	url := overrideUrl(cmd.Url, ctx.UseGitConfig)
-	opts := &manager.InstallOptions{
-		WorkDir: ctx.WorkDir,
-		Boost:   cmd.Boost,
-	}
-	for _, path := range cmd.Paths {
-		pkg := &manager.Package{
-			URL:     url,
-			Path:    path,
-			Version: cmd.Version,
-		}
-		if err := m.InstallFromApkg(pkg, opts); err != nil {
-			logrus.Error(err)
-			return err
-		}
-		for _, mpg := range pkg.Mappings {
-			requirements.Add(parser.RequiredPackage{
-				Url: cmd.Url,
-				Mappings: []parser.ReqiuredMapping{{
-					Src:     path,
-					Dest:    mpg.Dest,
-					Version: cmd.Version,
-				}},
-			})
-		}
 	}
 
 	if cmd.Save {

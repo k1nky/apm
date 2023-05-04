@@ -12,7 +12,8 @@ import (
 
 	"github.com/k1nky/apm/internal/copy"
 	"github.com/k1nky/apm/internal/downloader"
-	"github.com/sirupsen/logrus"
+
+	"github.com/pterm/pterm"
 )
 
 type Manager struct {
@@ -23,20 +24,13 @@ type Manager struct {
 type InstallOptions struct {
 	WorkDir         string
 	DownloadOptions *downloader.Options
-	OnceDownload    bool
 	Force           bool
-	Boost           bool
-}
-type Mapping struct {
-	Src  string
-	Dest string
 }
 type Package struct {
-	URL         string
-	Version     string
-	Path        string
-	Mappings    []Mapping
-	storagePath string
+	URL     string
+	Version string
+	Src     string
+	Dest    string
 }
 
 const (
@@ -45,6 +39,14 @@ const (
 	DefaultTmpPrefix   = "apm-"
 )
 
+func DefaultInstallOptions() *InstallOptions {
+	return &InstallOptions{
+		DownloadOptions: downloader.DefaultOptions(),
+		WorkDir:         ".",
+		Force:           false,
+	}
+}
+
 func (opts *InstallOptions) Validate() error {
 	if opts.DownloadOptions == nil {
 		opts.DownloadOptions = downloader.DefaultOptions()
@@ -52,13 +54,43 @@ func (opts *InstallOptions) Validate() error {
 	return nil
 }
 
-func DefaultInstallOptions() *InstallOptions {
-	return &InstallOptions{
-		DownloadOptions: downloader.DefaultOptions(),
-		WorkDir:         ".",
-		OnceDownload:    true,
-		Force:           false,
+func (p Package) Hash() string {
+	return fmt.Sprintf("%x", md5.Sum([]byte(p.URL+p.Src+p.Version)))
+}
+
+func (p Package) String() (s string) {
+	s = fmt.Sprintf("%s,%s,%s", p.URL, p.Version, p.Src)
+	return
+}
+
+func (p *Package) Validate() error {
+	if p.URL == "" {
+		return fmt.Errorf("invalid package url")
 	}
+	if p.Version == "" {
+		p.Version = DefaultVersion
+	}
+	if p.Src == "" {
+		p.Src = "."
+	}
+	if p.Dest == "" {
+		return fmt.Errorf("invalid package destination")
+	}
+	return nil
+}
+
+func PackageFromString(str string) *Package {
+	chunks := strings.Split(str, ",")
+	p := &Package{
+		URL: chunks[0],
+	}
+	if len(chunks) > 1 {
+		p.Version = chunks[1]
+		if len(chunks) > 2 {
+			p.Src = chunks[2]
+		}
+	}
+	return p
 }
 
 func (m *Manager) MakeStorage(dir string) (err error) {
@@ -75,29 +107,6 @@ func (m *Manager) MakeStorage(dir string) (err error) {
 		return err
 	}
 
-	return nil
-}
-
-func (p Package) Hash() string {
-	return fmt.Sprintf("%x@%s", md5.Sum([]byte(p.URL+p.Path)), p.Version)
-}
-
-func (p *Package) Validate() error {
-	if p.URL == "" {
-		return fmt.Errorf("invalid package url")
-	}
-	if p.Version == "" {
-		p.Version = DefaultVersion
-	}
-	if p.Path == "" {
-		p.Path = "."
-	}
-	if len(p.Mappings) == 0 {
-		p.Mappings = []Mapping{{
-			Src:  "*",
-			Dest: ".",
-		}}
-	}
 	return nil
 }
 
@@ -121,20 +130,30 @@ func (m *Manager) download(p *Package, opts *downloader.Options) (err error) {
 	return
 }
 
-func (m *Manager) unpack(p *Package) (err error) {
-	if err = os.MkdirAll(p.storagePath, copy.Mode0755); err != nil {
+// func (m *Manager) unpack(destDir string, src string) (err error) {
+func (m *Manager) unpack(src string, dest string) (err error) {
+	// copy to storage
+	tmpSrc := path.Join(m.TmpDir, src)
+	if info, err := os.Stat(tmpSrc); err != nil {
 		return err
+	} else {
+		if info.Mode().IsRegular() {
+			dest = path.Join(dest, src)
+		}
 	}
 
-	// copy to storage
-	if err = copy.Copy(m.TmpDir, p.storagePath, &copy.CopyOptions{Override: true}); err != nil {
+	if err = copy.Copy(tmpSrc, dest, &copy.CopyOptions{
+		Override: true,
+		Plain:    src == "" || src == ".",
+	}); err != nil {
 		return
 	}
-	err = os.RemoveAll(path.Join(p.storagePath, ".git"))
+
 	return
 }
 
-func (m *Manager) setupWorkdir(p *Package) (err error) {
+func (m *Manager) SetupWorkdir(wd string) (err error) {
+	m.WorkDir = wd
 	if m.WorkDir == "" {
 		if m.WorkDir, err = os.Getwd(); err != nil {
 			return
@@ -149,7 +168,6 @@ func (m *Manager) setupWorkdir(p *Package) (err error) {
 	if err = os.Chdir(m.WorkDir); err != nil {
 		return
 	}
-	err = makeLink(path.Join(".apm", p.Hash()), p.storagePath, true)
 	return
 }
 
@@ -169,109 +187,32 @@ func makeLink(name string, target string, override bool) (err error) {
 	return
 }
 
-func (m *Manager) setupMappings(p *Package) (err error) {
+func (m *Manager) setup(pkg *Package) (err error) {
 
 	var (
-		relpath  string
-		basename string
-		fs       []string
+		relpath string
 	)
 
-	packagePath := path.Join(".apm", p.Hash())
+	pkgHash := pkg.Hash()
+	pkgStoragePath := path.Join(m.Storage, pkgHash)
 
-	// TODO: validate mappings
-
-	for _, m := range p.Mappings {
-		m.Src = path.Join(p.Path, m.Src)
-		if m.Src == "" || m.Src == "." {
-			relpath, _ = filepath.Rel(path.Dir(m.Dest), packagePath)
-			if err = os.MkdirAll(path.Dir(m.Dest), copy.Mode0755); err != nil {
-				return
-			}
-			if err = makeLink(m.Dest, relpath, true); err != nil {
-				return
-			}
-		} else if strings.Contains(m.Src, "*") {
-			if fs, err = copy.ResolveGlob(packagePath, m.Src, nil); err != nil {
-				return
-			}
-			for _, f := range fs {
-				basename = path.Base(f)
-				relpath, _ = filepath.Rel(m.Dest, path.Dir(f))
-				if err = os.MkdirAll(m.Dest, copy.Mode0755); err != nil {
-					return
-				}
-				if err = makeLink(path.Join(m.Dest, basename), path.Join(relpath, basename), true); err != nil {
-					return
-				}
-			}
-		} else {
-			relpath, _ = filepath.Rel(path.Dir(m.Dest), path.Join(packagePath, m.Src))
-			if err = os.MkdirAll(path.Dir(m.Dest), copy.Mode0755); err != nil {
-				return
-			}
-			if err = makeLink(m.Dest, relpath, true); err != nil {
-				return
-			}
-		}
+	if err = m.unpack(pkg.Src, pkgStoragePath); err != nil {
+		return
 	}
-
-	return
-}
-
-func (m *Manager) InstallFromApkg(p *Package, opts *InstallOptions) (err error) {
-
-	defer m.cleanup()
-
-	if opts == nil {
-		opts = DefaultInstallOptions()
-	} else {
-		opts.Validate()
-	}
-
-	if err = m.MakeStorage(""); err != nil {
+	if err = makeLink(path.Join(".apm", pkgHash), path.Join(pkgStoragePath, pkg.Src), true); err != nil {
 		return
 	}
 
-	m.WorkDir = opts.WorkDir
-	p.storagePath = path.Join(m.Storage, p.Hash())
-	if err = m.download(p, opts.DownloadOptions); err != nil {
-		return
-	}
-	if err = m.unpack(p); err != nil {
-		return
-	}
-	// read apkg
-	apkg, err := ReadApkg(path.Join(p.storagePath, p.Path))
-	if err != nil {
-		return
-	}
-	p.Mappings = apkg.Mappings
+	pkgLocalPath := path.Join(".apm", pkgHash)
 
-	if err = m.setup(p); err != nil {
+	relpath, _ = filepath.Rel(path.Dir(pkg.Dest), pkgLocalPath)
+	if err = os.MkdirAll(path.Dir(pkg.Dest), copy.Mode0755); err != nil {
+		return
+	}
+	if err = makeLink(pkg.Dest, relpath, true); err != nil {
 		return
 	}
 
-	// apply boost
-	if opts.Boost {
-		err = m.applyBoost(p, apkg.Boost)
-	}
-
-	return err
-}
-
-func (m *Manager) applyBoost(p *Package, actions ApkgBoost) (err error) {
-	packagePath := path.Join(p.storagePath, p.Path)
-	for _, v := range actions.Copy {
-		src := path.Join(packagePath, v.Src)
-		dest := path.Join(m.WorkDir, v.Dest)
-		err = copy.Copy(src, dest, &copy.CopyOptions{
-			MakeLostDirectory: true,
-		})
-		if err != nil {
-			return
-		}
-	}
 	return
 }
 
@@ -289,53 +230,32 @@ func (m *Manager) Install(pkgs []*Package, opts *InstallOptions) (err error) {
 		return
 	}
 
+	if err = m.SetupWorkdir(opts.WorkDir); err != nil {
+		return
+	}
+
+	progressBar, _ := pterm.DefaultProgressbar.WithTotal(len(pkgs)).WithTitle("Installing").Start()
+
 	for _, p := range pkgs {
-		contextLogger := logrus.WithFields(logrus.Fields{
-			"url":     p.URL,
-			"version": p.Version,
-			"path":    p.Path,
-		})
-		contextLogger.Info("installing a package")
+		m.cleanup()
+		progressBar.UpdateTitle("Installing " + p.String())
 
 		if err := p.Validate(); err != nil {
-			return err
+			pterm.Warning.Println(err)
+			continue
 		}
-		m.WorkDir = opts.WorkDir
-		p.storagePath = path.Join(m.Storage, p.Hash())
 
-		if opts.Force || !m.isPackageExist(p) {
-			if err = m.download(p, opts.DownloadOptions); err != nil {
-				return
-			}
-			if err = m.unpack(p); err != nil {
-				return
-			}
+		if err = m.download(p, opts.DownloadOptions); err != nil {
+			pterm.Warning.Println(err)
+			continue
 		}
-		opts.DownloadOptions.OnlySwitch = opts.OnceDownload
 
 		if err = m.setup(p); err != nil {
-			return
+			pterm.Warning.Println(err)
+			continue
 		}
-
-		contextLogger.Info("the package is installed")
-	}
-
-	return nil
-}
-
-func (m *Manager) isPackageExist(p *Package) bool {
-	_, err := os.Stat(p.storagePath)
-	return os.IsExist(err)
-}
-
-func (m *Manager) setup(p *Package) (err error) {
-
-	if err = m.setupWorkdir(p); err != nil {
-		return
-	}
-
-	if err = m.setupMappings(p); err != nil {
-		return
+		pterm.Success.Printfln("Installing " + p.String())
+		progressBar.Increment()
 	}
 
 	return nil
